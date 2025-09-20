@@ -3,11 +3,13 @@ import streamlit as st
 from twilio.rest import Client
 
 def send_whatsapp(message: str):
+    """
+    Envía mensaje por WhatsApp usando Twilio configurado con secretos.
+    """
     client = Client(
         st.secrets["twilio"]["account_sid"],
         st.secrets["twilio"]["auth_token"]
     )
-
     msg = client.messages.create(
         body=message,
         from_=f"whatsapp:{st.secrets['twilio']['sandbox_number']}",
