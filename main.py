@@ -1,38 +1,51 @@
-# main.py
 import streamlit as st
-from checker import get_current_profile_pic_url, has_photo_changed
+import requests
+import hashlib
+from db import save_photo
 from notifier import send_whatsapp
-from db import save_photo, get_collection
-from time import sleep
+from streamlit_autorefresh import st_autorefresh
 
-st.title("Photo Update Notifier")
+st.title("Photo Update Notifier (cuenta privada)")
 
-INSTAGRAM_URL = st.secrets["instagram"]["url"]
+# URL de la miniatura pública de la cuenta privada
+INSTAGRAM_MINIATURE_URL = "https://instagram.feoh4-3.fna.fbcdn.net/v/t51.2885-19/548878794_18524321074061703_2757381932676116877_n.jpg?..."
 
-# Guardar el último hash de la foto en sesión
+# Guardar el último hash en sesión
 if "last_hash" not in st.session_state:
     st.session_state.last_hash = None
 
-# Tiempo entre revisiones (segundos)
-CHECK_INTERVAL = 60  # por ejemplo, 1 minuto
+# Funciones
+def get_image_bytes(url: str) -> bytes:
+    r = requests.get(url)
+    return r.content if r.status_code == 200 else None
 
-# Obtener URL de la foto actual
-current_url = get_current_profile_pic_url(INSTAGRAM_URL)
+def hash_image(image_bytes: bytes) -> str:
+    return hashlib.sha256(image_bytes).hexdigest()
 
-if current_url:
-    st.image(current_url, caption="Última foto detectada")
+# Auto refresco cada minuto
+st_autorefresh(interval=60 * 1000, key="refresh")
 
-    # Chequear si la foto cambió usando hash
-    changed, new_hash = has_photo_changed(current_url, st.session_state.last_hash)
+# Mostrar miniatura actual
+st.image(INSTAGRAM_MINIATURE_URL, caption="Miniatura actual")
 
-    if changed:
-        st.session_state.last_hash = new_hash
-        sid = send_whatsapp(f"📸 Nueva foto detectada: {current_url}")
-        st.success(f"Notificación enviada! SID: {sid}")
-        save_photo(current_url)
+# Descargar y calcular hash
+image_bytes = get_image_bytes(INSTAGRAM_MINIATURE_URL)
+if image_bytes:
+    current_hash = hash_image(image_bytes)
+    if st.session_state.last_hash != current_hash:
+        st.session_state.last_hash = current_hash
+        st.session_state.last_hash = current_hash
+
+        # Guardar en MongoDB
+        save_photo(INSTAGRAM_MINIATURE_URL)
+
+        # Notificar por WhatsApp
+        try:
+            sid = send_whatsapp(f"📸 Nueva foto detectada: {INSTAGRAM_MINIATURE_URL}")
+            st.success(f"Notificación enviada! SID: {sid}")
+        except Exception as e:
+            st.error(f"No se pudo enviar la notificación: {e}")
+    else:
+        st.info("No hay cambios en la foto.")
 else:
-    st.error("No se pudo obtener la foto de perfil")
-
-# Auto-revisión: esperar y recargar App
-sleep(CHECK_INTERVAL)
-st.rerun()
+    st.error("No se pudo descargar la miniatura.")
