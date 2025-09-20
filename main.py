@@ -8,9 +8,8 @@ from logs import log_access, get_access_logs
 from streamlit_geolocation import streamlit_geolocation
 import pandas as pd
 
-st.title("Photo Update")
+st.title("Photo Update con Detección Controlada de Ubicación")
 
-# Inicializar estados
 if "last_hash" not in st.session_state:
     st.session_state.last_hash = get_last_hash()
 if "photo_url" not in st.session_state:
@@ -38,7 +37,7 @@ else:
         st.session_state.photo_url = nueva_url
         st.info("URL actualizada. Por favor presiona 'Verificar actualización'")
 
-# Botón para iniciar detección de ubicación
+# Detectar ubicación y registrar acceso con spinner
 if not st.session_state.access_logged:
     if st.button("Detectar mi ubicación y registrar acceso"):
         st.session_state.detecting_location = True
@@ -71,7 +70,7 @@ for log in logs:
 df_logs = pd.DataFrame(data)
 st.dataframe(df_logs)
 
-# Botón para verificar cambios en la foto
+# Verificar cambios en la foto
 min_interval = timedelta(minutes=10)
 if st.button("Verificar actualización"):
     now = datetime.now()
@@ -92,6 +91,5 @@ if st.button("Verificar actualización"):
         else:
             st.info("No hay cambios en la foto o ya se notificó esta imagen.")
 
-# Mostrar última verificación
 if st.session_state.last_checked > datetime.min:
     st.write(f"Última verificación: {st.session_state.last_checked.strftime('%Y-%m-%d %H:%M:%S')}")
