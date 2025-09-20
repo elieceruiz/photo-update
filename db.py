@@ -9,8 +9,8 @@ def get_client():
 
 def get_collection():
     client = get_client()
-    db = client[st.secrets["mongodb"]["db"]]
-    return db["profile_photos"]
+    db = client["photo_update_db"]  # Aquí fijo el nombre de DB
+    return db["history"]  # Aquí fijo la colección como "history"
 
 def save_photo(url: str, hash_value: str):
     col = get_collection()
