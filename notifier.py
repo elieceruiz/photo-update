@@ -4,7 +4,7 @@ from twilio.rest import Client
 
 def send_whatsapp(message: str):
     """
-    Envía un mensaje de WhatsApp usando Twilio.
+    Envía mensaje WhatsApp usando Twilio.
     """
     client = Client(
         st.secrets["twilio"]["account_sid"],
