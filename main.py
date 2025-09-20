@@ -9,7 +9,7 @@ from logs import log_access, get_access_logs
 from streamlit_geolocation import streamlit_geolocation
 
 st.set_page_config(page_title="Photo Update", layout="centered")
-st.title("📸 Photo Update con Ubicación y Logs")
+st.title("📸 Photo Update")
 
 # Semilla inicial si DB está vacía
 seed_initial_photo()
