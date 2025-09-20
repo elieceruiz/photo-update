@@ -5,7 +5,7 @@ from db import save_photo
 from notifier import send_whatsapp
 from streamlit_autorefresh import st_autorefresh
 
-st.title("Photo Update Notifier (cuenta privada)")
+st.title("Photo Update")
 
 # Miniatura pública de la cuenta privada
 INSTAGRAM_MINIATURE_URL = "https://instagram.feoh4-3.fna.fbcdn.net/v/t51.2885-19/548878794_18524321074061703_2757381932676116877_n.jpg?stp=dst-jpg_s150x150_tt6&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby43MjguYzIifQ&_nc_ht=instagram.feoh4-3.fna.fbcdn.net&_nc_cat=103&_nc_oc=Q6cZ2QHC2hxRsKhT75OwVtO4Oc9RmvK_fmSXw_o9ny7J6GUk3on0m_ofsXcFK-WzMSUVEV0-Hi6H4wGNVOcXpVODNynY&_nc_ohc=mO3tE2y20x8Q7kNvwEvIxLs&_nc_gid=bzqjWzuarJVxkX7UWq6JNA&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_AfY6hM6ogTVzUIvQ3WpDLUNs4jg5EUle9618OVX509MsYg&oe=68D4B419&_nc_sid=8b3546"
