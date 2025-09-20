@@ -6,3 +6,4 @@ pymongo
 twilio
 streamlit-autorefresh
 googlemaps
+streamlit_geolocation
