@@ -8,9 +8,9 @@ from logs import log_access, get_access_logs
 from streamlit_geolocation import streamlit_geolocation
 import pandas as pd
 
-st.title("Photo Update con Detección Controlada de Ubicación")
+st.title("Photo Update")
 
-# Estados iniciales
+# Inicializar estados
 if "last_hash" not in st.session_state:
     st.session_state.last_hash = get_last_hash()
 if "photo_url" not in st.session_state:
@@ -58,7 +58,7 @@ if not st.session_state.access_logged:
                 st.error("No se pudo obtener la ubicación o permiso denegado.")
                 st.session_state.detecting_location = False
 
-# Mostrar historial de accesos
+# Mostrar historial
 st.subheader("Historial de accesos")
 logs = get_access_logs(limit=10)
 data = []
