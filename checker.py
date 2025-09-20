@@ -5,19 +5,21 @@ from bs4 import BeautifulSoup
 
 def get_current_profile_pic_url(instagram_url: str) -> str:
     """
-    Devuelve la URL de la foto de perfil actual desde Instagram.
-    Nota: para cuentas privadas, esto normalmente devuelve la miniatura pública
-    si la URL está accesible sin login.
+    Obtiene la URL de la foto de perfil actual de Instagram desde la URL base del perfil.
+    Retorna None si no se puede obtener o en caso de error.
+    NOTA: Para cuentas privadas es probable que no devuelva la URL real sin login.
     """
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/138.0.7204.243 Safari/537.36"
+        # Header User-Agent para simular navegador real y evitar bloqueos básicos
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/138.0.7204.243 Safari/537.36")
     }
     try:
         r = requests.get(instagram_url, headers=headers, timeout=10)
         if r.status_code != 200:
             return None
+        # Parsear HTML y buscar meta con propiedad og:image (donde está la imagen perfil)
         soup = BeautifulSoup(r.text, "html.parser")
         og_image = soup.find("meta", property="og:image")
         if og_image:
@@ -28,13 +30,13 @@ def get_current_profile_pic_url(instagram_url: str) -> str:
 
 def get_image_bytes(url: str) -> bytes:
     """
-    Descarga la imagen desde la URL y devuelve los bytes.
-    Se agregan headers para simular un navegador real.
+    Descarga la imagen desde la URL indicada y devuelve los bytes.
+    Si falla descarga o status distinto de 200, retorna None.
     """
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/138.0.7204.243 Safari/537.36",
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/138.0.7204.243 Safari/537.36"),
         "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
         "Referer": "https://www.instagram.com/"
     }
@@ -48,22 +50,20 @@ def get_image_bytes(url: str) -> bytes:
 
 def hash_image(image_bytes: bytes) -> str:
     """
-    Calcula el hash SHA-256 de los bytes de la imagen.
+    Calcula y retorna el hash SHA-256 único para los bytes recibidos.
+    Esto ayuda a detectar cambios en la imagen fácilmente.
     """
     return hashlib.sha256(image_bytes).hexdigest()
 
 def has_photo_changed(current_url: str, last_hash: str = None):
     """
-    Devuelve (bool, str):
-      - True si la foto cambió
-      - El hash actual de la imagen
+    Descarga la imagen de current_url, calcula hash y lo compara con last_hash.
+    Retorna (True, current_hash) si la imagen cambió o (False, last_hash) si no.
     """
     image_bytes = get_image_bytes(current_url)
     if not image_bytes:
         return False, last_hash
-
     current_hash = hash_image(image_bytes)
-
     if last_hash != current_hash:
         return True, current_hash
     return False, last_hash
