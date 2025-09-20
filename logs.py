@@ -9,14 +9,13 @@ def get_log_collection():
     db = client[st.secrets["mongodb"]["db"]]
     return db["access_logs"]
 
-def log_access(address=None, lat=None, lon=None):
+def log_access(lat=None, lon=None):
     col = get_log_collection()
     doc = {
         "evento": "acceso_app",
         "fecha": datetime.now(),
         "latitud": lat,
         "longitud": lon,
-        "direccion": address,
     }
     col.insert_one(doc)
 
