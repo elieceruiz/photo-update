@@ -1,32 +1,16 @@
 # logs.py
 import streamlit as st
-import googlemaps
 from datetime import datetime
 from db import get_client
 
-# Cliente de Google Maps, inicializado con la clave del secrets
-gmaps = googlemaps.Client(key=st.secrets["googlemaps"]["google_maps_api_key"])
-
+@st.cache_resource
 def get_log_collection():
     client = get_client()
     db = client[st.secrets["mongodb"]["db"]]
-    return db["access_logs"]  # colección para logs de accesos
+    return db["access_logs"]
 
-def get_coordinates(address):
-    try:
-        geocode_result = gmaps.geocode(address)
-        if geocode_result:
-            location = geocode_result[0]["geometry"]["location"]
-            return location["lat"], location["lng"]
-    except Exception as e:
-        print(f"Error al geocodificar dirección: {e}")
-    return None, None
-
-def log_access(address=None):
+def log_access(address=None, lat=None, lon=None):
     col = get_log_collection()
-    lat, lon = None, None
-    if address:
-        lat, lon = get_coordinates(address)
     doc = {
         "evento": "acceso_app",
         "fecha": datetime.now(),
