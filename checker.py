@@ -3,24 +3,6 @@ import requests
 import hashlib
 from bs4 import BeautifulSoup
 
-def get_current_profile_pic_url(instagram_url: str) -> str:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/138.0.7204.243 Safari/537.36"
-    }
-    try:
-        r = requests.get(instagram_url, headers=headers, timeout=10)
-        if r.status_code != 200:
-            return None
-        soup = BeautifulSoup(r.text, "html.parser")
-        og_image = soup.find("meta", property="og:image")
-        if og_image:
-            return og_image.get("content")
-    except Exception as e:
-        print(f"Error al obtener URL de perfil: {e}")
-    return None
-
 def get_image_bytes(url: str) -> bytes:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
