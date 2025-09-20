@@ -3,6 +3,9 @@ import streamlit as st
 from twilio.rest import Client
 
 def send_whatsapp(message: str):
+    """
+    Envía un mensaje de WhatsApp usando Twilio.
+    """
     client = Client(
         st.secrets["twilio"]["account_sid"],
         st.secrets["twilio"]["auth_token"]
