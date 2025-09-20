@@ -4,7 +4,7 @@ from twilio.rest import Client
 
 def send_whatsapp(message: str):
     """
-    Envía mensaje por WhatsApp usando Twilio configurado con secretos.
+    Envía notificación por WhatsApp usando Twilio configurado en secretos.
     """
     client = Client(
         st.secrets["twilio"]["account_sid"],
