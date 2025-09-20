@@ -8,8 +8,9 @@ from logs import log_access, get_access_logs
 from streamlit_geolocation import streamlit_geolocation
 import pandas as pd
 
-st.title("Photo Update con Detección Controlada de Ubicación")
+st.title("Photo Update")
 
+# Inicializar estados
 if "last_hash" not in st.session_state:
     st.session_state.last_hash = get_last_hash()
 if "photo_url" not in st.session_state:
@@ -20,45 +21,33 @@ if "last_checked" not in st.session_state:
     st.session_state.last_checked = datetime.min
 if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
-if "detecting_location" not in st.session_state:
-    st.session_state.detecting_location = False
-if "location" not in st.session_state:
-    st.session_state.location = None
 
-# Mostrar miniatura
+# Detecta ubicación y registra acceso solo una vez
+if not st.session_state.access_logged:
+    with st.spinner("Detectando ubicación automáticamente, espere..."):
+        location = streamlit_geolocation()
+        if location:
+            lat = location.get("latitude")
+            lon = location.get("longitude")
+            st.success(f"Ubicación detectada: latitud {lat}, longitud {lon}")
+            log_access(lat=lat, lon=lon)
+            st.session_state.access_logged = True
+        else:
+            st.error("No se pudo obtener la ubicación o permiso denegado.")
+
+# Mostrar miniatura Instagram
 image_bytes = get_image_bytes(st.session_state.photo_url) if st.session_state.photo_url else None
 if image_bytes:
     st.image(image_bytes, caption="Miniatura actual")
 else:
     st.warning("No se pudo cargar la miniatura desde la URL guardada.")
-
     nueva_url = st.text_input("Ingrese nueva URL de miniatura Instagram")
     if nueva_url and nueva_url != st.session_state.photo_url:
         st.session_state.photo_url = nueva_url
         st.info("URL actualizada. Por favor presiona 'Verificar actualización'")
 
-# Detectar ubicación y registrar acceso con spinner
-if not st.session_state.access_logged:
-    if st.button("Detectar mi ubicación y registrar acceso"):
-        st.session_state.detecting_location = True
-
-    if st.session_state.detecting_location:
-        with st.spinner("Obteniendo ubicación, por favor espera..."):
-            location = streamlit_geolocation()
-            if location:
-                st.session_state.location = location
-                lat = location.get("latitude")
-                lon = location.get("longitude")
-                st.success(f"Ubicación detectada: latitud {lat}, longitud {lon}")
-                log_access(lat=lat, lon=lon)
-                st.session_state.access_logged = True
-                st.session_state.detecting_location = False
-            else:
-                st.error("No se pudo obtener la ubicación o permiso denegado.")
-                st.session_state.detecting_location = False
-
-# Mostrar historial
-st.subheader("Historial de accesos")
+# Mostrar historial de accesos
+st.subheader("Historial de accesos recientes")
 logs = get_access_logs(limit=10)
 data = []
 for log in logs:
@@ -70,7 +59,7 @@ for log in logs:
 df_logs = pd.DataFrame(data)
 st.dataframe(df_logs)
 
-# Verificar cambios en la foto
+# Botón para verificar cambios en la foto
 min_interval = timedelta(minutes=10)
 if st.button("Verificar actualización"):
     now = datetime.now()
@@ -91,5 +80,6 @@ if st.button("Verificar actualización"):
         else:
             st.info("No hay cambios en la foto o ya se notificó esta imagen.")
 
+# Mostrar última verificación
 if st.session_state.last_checked > datetime.min:
     st.write(f"Última verificación: {st.session_state.last_checked.strftime('%Y-%m-%d %H:%M:%S')}")
