@@ -1,13 +1,18 @@
 # checker.py
 import requests
 import hashlib
-from bs4 import BeautifulSoup
 
 def get_image_bytes(url: str) -> bytes:
+    """
+    Descarga los bytes de una imagen a partir de su URL.
+    Devuelve None si hay error o no se puede descargar.
+    """
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/138.0.7204.243 Safari/537.36",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/138.0.7204.243 Safari/537.36"
+        ),
         "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
         "Referer": "https://www.instagram.com/"
     }
@@ -20,9 +25,16 @@ def get_image_bytes(url: str) -> bytes:
     return None
 
 def hash_image(image_bytes: bytes) -> str:
+    """
+    Calcula el hash SHA-256 de los bytes de una imagen.
+    """
     return hashlib.sha256(image_bytes).hexdigest()
 
 def has_photo_changed(current_url: str, last_hash: str = None):
+    """
+    Verifica si la foto en current_url cambió comparando hashes.
+    Devuelve (True, nuevo_hash) si cambió, o (False, hash_anterior).
+    """
     image_bytes = get_image_bytes(current_url)
     if not image_bytes:
         return False, last_hash
