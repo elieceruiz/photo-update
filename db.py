@@ -4,43 +4,24 @@ from pymongo import MongoClient
 
 @st.cache_resource
 def get_client():
-    """
-    Crear cliente Mongo único cacheado para evitar múltiples conexiones.
-    """
     uri = st.secrets["mongodb"]["uri"]
     return MongoClient(uri)
 
 def get_collection():
-    """
-    Obtiene colección Mongo configurada en secretos.
-    """
     client = get_client()
     db = client[st.secrets["mongodb"]["db"]]
-    return db[st.secrets["mongodb"]["collection"]]
+    return db["profile_photos"]
 
 def save_photo(url: str, hash_value: str):
-    """
-    Guarda en Mongo un nuevo documento con url y hash.
-    """
     col = get_collection()
     col.insert_one({"photo_url": url, "hash": hash_value})
 
 def get_last_hash():
-    """
-    Obtiene el último hash guardado (por orden descendente _id).
-    """
     col = get_collection()
     latest = col.find_one(sort=[('_id', -1)])
-    if latest and "hash" in latest:
-        return latest["hash"]
-    return None
+    return latest["hash"] if latest and "hash" in latest else None
 
 def get_last_photo_url():
-    """
-    Obtiene la última URL guardada.
-    """
     col = get_collection()
     latest = col.find_one(sort=[('_id', -1)])
-    if latest and "photo_url" in latest:
-        return latest["photo_url"]
-    return None
+    return latest["photo_url"] if latest and "photo_url" in latest else None
