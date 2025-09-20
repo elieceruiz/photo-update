@@ -1,3 +1,4 @@
+# main.py
 import streamlit as st
 from checker import get_current_profile_pic_url, has_photo_changed
 from notifier import send_whatsapp
