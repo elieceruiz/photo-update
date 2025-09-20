@@ -1,9 +1,7 @@
 # requirements.txt
 streamlit
+pymongo
 requests
 beautifulsoup4
-pymongo
 twilio
-streamlit-autorefresh
-googlemaps
-streamlit_geolocation
+streamlit-geolocation
