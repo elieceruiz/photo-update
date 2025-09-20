@@ -4,8 +4,8 @@ import hashlib
 
 def get_image_bytes(url: str) -> bytes:
     """
-    Descarga los bytes de una imagen a partir de su URL.
-    Devuelve None si hay error o no se puede descargar.
+    Descarga los bytes de la imagen desde la URL.
+    Retorna None si hay error.
     """
     headers = {
         "User-Agent": (
@@ -25,15 +25,13 @@ def get_image_bytes(url: str) -> bytes:
     return None
 
 def hash_image(image_bytes: bytes) -> str:
-    """
-    Calcula el hash SHA-256 de los bytes de una imagen.
-    """
+    """Genera hash SHA256 único de la imagen."""
     return hashlib.sha256(image_bytes).hexdigest()
 
 def has_photo_changed(current_url: str, last_hash: str = None):
     """
-    Verifica si la foto en current_url cambió comparando hashes.
-    Devuelve (True, nuevo_hash) si cambió, o (False, hash_anterior).
+    Verifica si la foto cambió comparando hashes.
+    Retorna (changed: bool, current_hash: str).
     """
     image_bytes = get_image_bytes(current_url)
     if not image_bytes:
