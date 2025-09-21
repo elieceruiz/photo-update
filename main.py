@@ -147,4 +147,4 @@ if db is not None:
             })
 
         df = pd.DataFrame(data)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df.reset_index(drop=True), use_container_width=True)
