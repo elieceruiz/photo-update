@@ -7,7 +7,7 @@ from checker import get_image_bytes, has_photo_changed
 from db import save_photo, get_last_hash, get_last_photo_url
 from notifier import send_whatsapp
 from logs import log_access, get_access_logs
-from location import get_location_google  # 🔑 nuevo import
+from location import get_location_google
 
 st.set_page_config(page_title="Photo Update", layout="centered")
 st.title("📸 Photo Update")
@@ -34,12 +34,11 @@ if not st.session_state.access_logged:
         lat, lon, acc = get_location_google()
         if lat and lon:
             log_access(lat=lat, lon=lon)
-            st.session_state.access_logged = True
-            st.success(f"Ubicación detectada: lat {lat:.6f}, lon {lon:.6f} (±{acc} m)")
+            st.success(f"📍 Ubicación detectada: lat {lat:.6f}, lon {lon:.6f} (±{acc} m)")
         else:
-            st.error("❌ No se pudo obtener la ubicación con Google.")
             log_access(lat=None, lon=None)
-            st.session_state.access_logged = True
+            st.warning("⚠️ No se pudo obtener la ubicación con Google.")
+        st.session_state.access_logged = True
 
 # =========================
 # Inspector de estado
@@ -60,7 +59,7 @@ else:
     nueva_url = st.text_input("Ingrese nueva URL de miniatura Instagram")
     if nueva_url and nueva_url != st.session_state.photo_url:
         st.session_state.photo_url = nueva_url
-        st.info("URL actualizada. Presiona 'Verificar actualización'.")
+        st.info("✅ URL actualizada. Presiona 'Verificar actualización'.")
 
 # =========================
 # Historial de accesos
@@ -98,8 +97,8 @@ if st.button("Verificar actualización"):
                 sid = send_whatsapp(
                     f"📸 Nueva foto detectada: {st.session_state.photo_url}"
                 )
-                st.success(f"Notificación enviada! SID: {sid}")
+                st.success(f"✅ Notificación enviada! SID: {sid}")
             except Exception as e:
-                st.error(f"No se pudo enviar la notificación: {e}")
+                st.error(f"❌ No se pudo enviar la notificación: {e}")
         else:
             st.info("ℹ️ No hay cambios en la foto o ya se notificó esta imagen.")
