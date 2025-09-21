@@ -6,3 +6,4 @@ beautifulsoup4
 twilio
 pydeck
 pytz
+streamlit-javascript
