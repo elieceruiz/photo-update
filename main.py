@@ -129,7 +129,6 @@ if db is not None:
         for idx, l in enumerate(logs):  # idx 0 es el más reciente
             ts = l["ts"].astimezone(colombia).strftime("%d %b %y %H:%M")
             data.append({
-                "#": idx + 1,  # numeración iniciando en 1 para el más reciente
                 "Fecha": ts,
                 "Lat": f"{l.get('lat'):.6f}" if l.get("lat") else None,
                 "Lon": f"{l.get('lon'):.6f}" if l.get("lon") else None,
