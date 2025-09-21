@@ -66,5 +66,5 @@ if logs:
     df = pd.DataFrame(data)
     df.index = range(1, len(df) + 1)
     df = df.iloc[::-1]
-    st.subheader("📜 Historial de accesos recientes")
+    st.subheader("📜 Historial de accesos")
     st.dataframe(df, use_container_width=True)
