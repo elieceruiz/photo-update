@@ -11,7 +11,7 @@ def hemisferio_latitud(lat):
     return 'N' if lat >= 0 else 'S'
 
 def hemisferio_longitud(lon):
-    return 'E' if lon >= 0 else 'O'
+    return 'E' if lon >= 0 else 'W'
 
 def formato_gms_con_hemisferio(lat, lon):
     lat_g, lat_m, lat_s = decimal_a_gms(lat)
