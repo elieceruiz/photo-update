@@ -4,6 +4,5 @@ pymongo
 requests
 beautifulsoup4
 twilio
-pydeck
-pytz
+streamlit-geolocation
 streamlit-javascript
