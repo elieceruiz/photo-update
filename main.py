@@ -2,16 +2,16 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
+import json
+import streamlit.components.v1 as components
 
 from checker import get_image_bytes, has_photo_changed
 from db import save_photo, get_last_hash, get_last_photo_url
 from notifier import send_whatsapp
 from logs import log_access, get_access_logs
 
-from geo_component import get_geolocation
-
 st.set_page_config(page_title="Photo Update", layout="centered")
-st.title("📸 Photo Update con geolocalización real (componente)")
+st.title("📸 Photo Update con geolocalización inline")
 
 # =========================
 # Estados iniciales
@@ -26,30 +26,70 @@ if "last_checked" not in st.session_state:
     st.session_state.last_checked = datetime.min
 if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
+if "geo_data" not in st.session_state:
+    st.session_state.geo_data = None
 
 # =========================
-# Geolocalización
+# Geolocalización con inline JS
 # =========================
 if not st.session_state.access_logged:
     st.info("🌍 Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
 
-    geo = get_geolocation()
+    geo_html = """
+    <script>
+    const send = (data) => {
+        const streamlitEvent = new CustomEvent("streamlit:componentReady", { detail: { value: JSON.stringify(data) } });
+        window.parent.document.dispatchEvent(streamlitEvent);
+    };
 
-    if geo and "lat" in geo and "lon" in geo:
-        lat, lon = float(geo["lat"]), float(geo["lon"])
-        acc = geo.get("accuracy")
-        st.success(f"📍 Ubicación detectada: {lat:.6f}, {lon:.6f} (±{acc} m)")
-        log_access(lat=lat, lon=lon)
-        st.session_state.access_logged = True
-    elif geo and "error" in geo:
-        st.warning(f"⚠️ Error navegador: {geo['error']}")
-        log_access(lat=None, lon=None)
-        st.session_state.access_logged = True
-    else:
+    function success(pos) {
+        const data = {
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            accuracy: pos.coords.accuracy
+        };
+        send(data);
+    }
+
+    function error(err) {
+        const data = { error: err.message || err.code };
+        send(data);
+    }
+
+    navigator.geolocation.getCurrentPosition(success, error, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+    });
+    </script>
+    """
+
+    components.html(geo_html, height=0)
+
+    # Fallback temporal: pedimos manual si no llegó nada aún
+    if st.session_state.geo_data is None:
         st.info("⌛ Esperando respuesta del navegador...")
+    else:
+        res = st.session_state.geo_data
+        if "error" in res:
+            st.warning(f"⚠️ Error navegador: {res['error']}")
+            log_access(lat=None, lon=None)
+            st.session_state.access_logged = True
+        else:
+            lat, lon = res["lat"], res["lon"]
+            acc = res.get("accuracy", "?")
+            st.success(f"📍 Ubicación detectada: {lat}, {lon} (±{acc} m)")
+            log_access(lat=lat, lon=lon)
+            st.session_state.access_logged = True
 
 # =========================
-# Foto actual
+# Inspector
+# =========================
+st.subheader("🔍 Inspector de estado")
+st.json(st.session_state.geo_data or {"geo": "No detectado"})
+
+# =========================
+# Foto
 # =========================
 image_bytes = get_image_bytes(st.session_state.photo_url) if st.session_state.photo_url else None
 if image_bytes:
@@ -62,7 +102,7 @@ else:
         st.info("✅ URL actualizada. Presiona 'Verificar actualización'.")
 
 # =========================
-# Historial de accesos
+# Historial
 # =========================
 st.subheader("📜 Historial de accesos recientes")
 logs = get_access_logs(limit=10)
