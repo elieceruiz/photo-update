@@ -11,7 +11,7 @@ import pandas as pd
 # =========================
 # CONFIG
 # =========================
-st.set_page_config(page_title="Photo Update", layout="centered")
+st.set_page_config(page_title="📸 Update", layout="centered")
 
 colombia = pytz.timezone("America/Bogota")
 
@@ -33,12 +33,13 @@ def download_image(url: str) -> bytes:
 def calculate_hash(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
-def log_access(lat=None, lon=None):
+def log_access(lat=None, lon=None, acc=None):
     if db is not None:
         db.access_log.insert_one({
             "ts": datetime.now(colombia),
             "lat": lat,
-            "lon": lon
+            "lon": lon,
+            "acc": acc
         })
 
 # =========================
@@ -67,13 +68,13 @@ if not st.session_state.access_logged:
             acc = geo["coords"].get("accuracy", "?")
 
             st.success(f"📍 Ubicación detectada: {lat:.6f}, {lon:.6f} (±{acc} m)")
-            log_access(lat=lat, lon=lon)
+            log_access(lat=lat, lon=lon, acc=acc)
             st.session_state.geo_data = {"lat": lat, "lon": lon, "accuracy": acc}
             st.session_state.access_logged = True
 
         elif "error" in geo:
             st.warning(f"⚠️ Error navegador: {geo['error']}")
-            log_access(lat=None, lon=None)
+            log_access(lat=None, lon=None, acc=None)
             st.session_state.access_logged = True
 
 # =========================
@@ -87,7 +88,7 @@ if latest:
     st.subheader("🔍 Inspector de estado")
     checked_at = latest.get("checked_at")
     if isinstance(checked_at, datetime):
-        checked_at = checked_at.strftime("%Y-%m-%d %H:%M:%S")
+        checked_at = checked_at.strftime("%d %b %y %H:%M")
 
     st.json({
         "Último Hash": latest.get("hash"),
@@ -131,11 +132,19 @@ if st.button("🔄 Verificar foto ahora"):
 # =========================
 if db is not None:
     st.subheader("📜 Historial de accesos recientes")
-    logs = list(db.access_log.find().sort("ts", -1).limit(10))
+    logs = list(db.access_log.find().sort("ts", -1))
     if logs:
-        df = pd.DataFrame([{
-            "Fecha": l["ts"].strftime("%Y-%m-%d %H:%M:%S"),
-            "Lat": l.get("lat"),
-            "Lon": l.get("lon")
-        } for l in logs])
-        st.dataframe(df)
+        total = len(logs)
+        data = []
+        for idx, l in enumerate(reversed(logs)):  # más antiguo = 1, más reciente = total
+            ts = l["ts"].astimezone(colombia).strftime("%d %b %y %H:%M")
+            data.append({
+                "#": idx + 1,
+                "Fecha": ts,
+                "Lat": f"{l.get('lat'):.6f}" if l.get("lat") else None,
+                "Lon": f"{l.get('lon'):.6f}" if l.get("lon") else None,
+                "±m": f"{int(l.get('acc'))}" if l.get("acc") else None
+            })
+
+        df = pd.DataFrame(data)
+        st.dataframe(df, use_container_width=True)
