@@ -1,4 +1,3 @@
-# main.py
 import streamlit as st
 from pymongo import MongoClient
 import hashlib
@@ -123,10 +122,11 @@ if st.button("🔄 Verificar foto ahora"):
 # =========================
 if db is not None:
     st.subheader("📜 Historial de accesos recientes")
-    logs = list(db.access_log.find().sort("ts", -1))  # orden descendente
+
+    logs = list(db.access_log.find().sort("ts", 1))  # orden ascendente para conteo
     if logs:
         data = []
-        for idx, l in enumerate(logs):  # idx 0 es el más reciente
+        for l in logs:
             ts = l["ts"].astimezone(colombia).strftime("%d %b %y %H:%M")
             data.append({
                 "Fecha": ts,
@@ -134,5 +134,10 @@ if db is not None:
                 "Lon": f"{l.get('lon'):.6f}" if l.get("lon") else None,
                 "±m": f"{int(l.get('acc'))}" if l.get("acc") else None
             })
+
         df = pd.DataFrame(data)
+        df.index = range(1, len(df) + 1)  # índice inicia en 1
+
+        df = df.iloc[::-1]  # invertir orden para mostrar descendente en Streamlit
+
         st.dataframe(df, use_container_width=True)
