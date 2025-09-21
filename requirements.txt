@@ -1,9 +1,9 @@
 # requirements.txt
-streamlit==1.36.0
-pandas
-requests
+googlemaps
+streamlit
 pymongo
-pillow
-python-dotenv
+requests
+beautifulsoup4
 twilio
-streamlit-geolocation
+pydeck
+pytz
