@@ -2,17 +2,16 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
-import json
 
 from checker import get_image_bytes, has_photo_changed
 from db import save_photo, get_last_hash, get_last_photo_url
 from notifier import send_whatsapp
 from logs import log_access, get_access_logs
 
-import streamlit.components.v1 as components
+from geo_component import get_geolocation
 
 st.set_page_config(page_title="Photo Update", layout="centered")
-st.title("📸 Photo Update con ubicación desde navegador (JS directo)")
+st.title("📸 Photo Update con geolocalización real (componente)")
 
 # =========================
 # Estados iniciales
@@ -27,81 +26,30 @@ if "last_checked" not in st.session_state:
     st.session_state.last_checked = datetime.min
 if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
-if "geo_data" not in st.session_state:
-    st.session_state.geo_data = None
-if "geo_raw" not in st.session_state:
-    st.session_state.geo_raw = None
 
 # =========================
-# Detección de ubicación con HTML + JS
+# Geolocalización
 # =========================
 if not st.session_state.access_logged:
     st.info("🌍 Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
 
-    # HTML+JS para pedir ubicación y mandarla a Streamlit
-    components.html(
-        """
-        <script>
-        const sendCoords = (pos) => {
-            const data = {
-                lat: pos.coords.latitude,
-                lon: pos.coords.longitude,
-                accuracy: pos.coords.accuracy
-            };
-            Streamlit.setComponentValue(JSON.stringify(data)); // ✅ mandar JSON
-        };
+    geo = get_geolocation()
 
-        const sendError = (err) => {
-            const data = {error: err.message || err.code};
-            Streamlit.setComponentValue(JSON.stringify(data)); // ✅ mandar error
-        };
-
-        navigator.geolocation.getCurrentPosition(sendCoords, sendError, {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 0
-        });
-        </script>
-        """,
-        height=0,
-    )
-
-    # Recibir valor
-    geo_raw = st.session_state.get("component_value")
-
-    if geo_raw:
-        st.session_state.geo_raw = geo_raw  # guardar crudo para debug
-        try:
-            res = json.loads(geo_raw)
-        except Exception:
-            st.error(f"⚠️ No se pudo parsear la respuesta del navegador: {geo_raw}")
-            res = {}
-
-        if res.get("error"):
-            st.warning(f"⚠️ Error navegador: {res['error']}")
-            log_access(lat=None, lon=None)
-            st.session_state.access_logged = True
-        elif "lat" in res and "lon" in res:
-            lat, lon = float(res["lat"]), float(res["lon"])
-            acc = res.get("accuracy")
-            st.success(f"📍 Ubicación detectada: {lat:.6f}, {lon:.6f} (±{acc} m)")
-            log_access(lat=lat, lon=lon)
-            st.session_state.geo_data = res
-            st.session_state.access_logged = True
-        else:
-            st.error(f"❌ Respuesta inesperada: {res}")
+    if geo and "lat" in geo and "lon" in geo:
+        lat, lon = float(geo["lat"]), float(geo["lon"])
+        acc = geo.get("accuracy")
+        st.success(f"📍 Ubicación detectada: {lat:.6f}, {lon:.6f} (±{acc} m)")
+        log_access(lat=lat, lon=lon)
+        st.session_state.access_logged = True
+    elif geo and "error" in geo:
+        st.warning(f"⚠️ Error navegador: {geo['error']}")
+        log_access(lat=None, lon=None)
+        st.session_state.access_logged = True
     else:
         st.info("⌛ Esperando respuesta del navegador...")
 
 # =========================
-# Inspector de estado
-# =========================
-st.subheader("🔍 Inspector de estado")
-st.write("**Crudo navegador:**", st.session_state.geo_raw)
-st.json(st.session_state.geo_data or {"geo": "No detectado"})
-
-# =========================
-# Foto
+# Foto actual
 # =========================
 image_bytes = get_image_bytes(st.session_state.photo_url) if st.session_state.photo_url else None
 if image_bytes:
@@ -114,7 +62,7 @@ else:
         st.info("✅ URL actualizada. Presiona 'Verificar actualización'.")
 
 # =========================
-# Historial
+# Historial de accesos
 # =========================
 st.subheader("📜 Historial de accesos recientes")
 logs = get_access_logs(limit=10)
