@@ -10,7 +10,7 @@ from logs import log_access, get_access_logs
 from location import get_location_google
 
 st.set_page_config(page_title="Photo Update", layout="centered")
-st.title("📸 Photo Update")
+st.title("📸 Photo Update (con Debug)")
 
 # =========================
 # Estados iniciales
@@ -27,7 +27,25 @@ if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
 
 # =========================
-# Detectar ubicación (Google)
+# Bloque de debug de API Key
+# =========================
+st.subheader("🛠️ Debug API Key")
+if "googlemaps" in st.secrets and "google_maps_api_key" in st.secrets["googlemaps"]:
+    api_key_debug = st.secrets["googlemaps"]["google_maps_api_key"]
+    st.info(f"🔑 API Key detectada (primeros 8): {api_key_debug[:8]}********")
+else:
+    st.error("❌ No se encontró la API Key en st.secrets['googlemaps']['google_maps_api_key']")
+
+# Botón de prueba directa de API Key
+if st.button("Probar API Key (sin logs)"):
+    lat, lon, acc = get_location_google()
+    if lat and lon:
+        st.success(f"✅ Google respondió: lat {lat:.6f}, lon {lon:.6f} (±{acc} m)")
+    else:
+        st.error("❌ Google no devolvió ubicación válida")
+
+# =========================
+# Detectar ubicación (Google) normal
 # =========================
 if not st.session_state.access_logged:
     with st.spinner("Detectando ubicación con Google..."):
