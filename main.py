@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 from pymongo import MongoClient
 from checker import get_image_bytes, has_photo_changed
 from notifier import send_whatsapp
+from streamlit_geolocation import streamlit_geolocation
 import pandas as pd
 import pytz
-import json
 
 # =========================
 # CONFIGURACIÓN
@@ -68,26 +68,21 @@ if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
 
 # =========================
-# GEOLOCALIZACIÓN (FRONT)
+# GEOLOCALIZACIÓN
 # =========================
 st.write("🌍 Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
 
-# ⚡ Ahora con st.query_params en lugar de experimental
-geo_data = st.query_params.get("geo", [None])[0]
-debug_info = {"geo": geo_data if geo_data else "No detectado"}
-st.json(debug_info)
-
-if geo_data and not st.session_state.access_logged:
-    try:
-        res = json.loads(geo_data)
-        lat = float(res["lat"])
-        lon = float(res["lon"])
-        acc = res.get("accuracy", None)
+if not st.session_state.access_logged:
+    location = streamlit_geolocation()
+    if location and "latitude" in location and "longitude" in location:
+        lat = location["latitude"]
+        lon = location["longitude"]
+        acc = location.get("accuracy", "?")
         st.success(f"📍 Ubicación detectada: {lat}, {lon} (±{acc} m)")
         log_access(lat=lat, lon=lon)
         st.session_state.access_logged = True
-    except Exception as e:
-        st.error(f"⚠️ No se pudo parsear ubicación: {e}")
+    else:
+        st.warning("⚠️ No se pudo obtener ubicación o se denegó el permiso.")
 
 # =========================
 # MOSTRAR MINIATURA INSTAGRAM
