@@ -7,7 +7,7 @@ import pandas as pd
 from geolocation import handle_geolocation
 from photo_checker import check_and_update_photo, download_image
 from db import get_latest_record, get_access_logs
-from geo_utils import decimal_a_gms, formato_gms
+from geo_utils import formato_gms_con_hemisferio
 
 st.set_page_config(page_title="📸 Update", layout="centered")
 colombia = pytz.timezone("America/Bogota")
