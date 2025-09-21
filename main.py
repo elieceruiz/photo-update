@@ -146,5 +146,7 @@ if db is not None:
                 "±m": f"{int(l.get('acc'))}" if l.get("acc") else None
             })
 
-        df = pd.DataFrame(data)
-        st.dataframe(df.reset_index(drop=True), use_container_width=True)
+        df = pd.DataFrame(data)  # tu DataFrame original
+        df_display = df.reset_index(drop=True)  # elimina índice como columna
+        st.dataframe(df_display, use_container_width=True)
+
