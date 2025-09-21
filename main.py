@@ -2,17 +2,17 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
-import json  # 👈 necesario para parsear respuesta de JS
+import json
 
 from checker import get_image_bytes, has_photo_changed
 from db import save_photo, get_last_hash, get_last_photo_url
 from notifier import send_whatsapp
 from logs import log_access, get_access_logs
 
-from streamlit_javascript import st_javascript
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Photo Update", layout="centered")
-st.title("📸 Photo Update con ubicación desde navegador")
+st.title("📸 Photo Update con ubicación desde navegador (Plan B)")
 
 # =========================
 # Estados iniciales
@@ -27,79 +27,77 @@ if "last_checked" not in st.session_state:
     st.session_state.last_checked = datetime.min
 if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
+if "geo_data" not in st.session_state:
+    st.session_state.geo_data = None
 
 # =========================
-# Detección de ubicación con JS (navigator.geolocation)
+# Detección de ubicación con HTML + JS
 # =========================
 if not st.session_state.access_logged:
-    st.info("Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
+    st.info("🌍 Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
 
-    js_code = """
-    (async () => {
-      return new Promise((resolve) => {
-        if (!navigator.geolocation) {
-          resolve("{\\"error\\": \\"no_support\\"}");
-          return;
-        }
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const result = {
-              lat: pos.coords.latitude,
-              lon: pos.coords.longitude,
-              accuracy: pos.coords.accuracy
+    # HTML+JS para pedir ubicación y mandarla a Streamlit
+    components.html(
+        """
+        <script>
+        const sendCoords = (pos) => {
+            const data = {
+                lat: pos.coords.latitude,
+                lon: pos.coords.longitude,
+                accuracy: pos.coords.accuracy
             };
-            resolve(JSON.stringify(result)); // 🔥 forzar string JSON
-          },
-          (err) => {
-            const result = { error: err.message || err.code };
-            resolve(JSON.stringify(result)); // 🔥 forzar string JSON
-          },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        );
-      });
-    })();
-    """
+            const streamlitEvent = new CustomEvent("streamlit:setComponentValue", {detail: JSON.stringify(data)});
+            window.parent.document.dispatchEvent(streamlitEvent);
+        };
 
-    raw = st_javascript(js_code, key="geo_js")
+        const sendError = (err) => {
+            const data = {error: err.message || err.code};
+            const streamlitEvent = new CustomEvent("streamlit:setComponentValue", {detail: JSON.stringify(data)});
+            window.parent.document.dispatchEvent(streamlitEvent);
+        };
 
-    # 🔎 Debug extendido
-    st.write("🔎 Respuesta cruda del navegador:", raw, "| Tipo:", type(raw))
+        navigator.geolocation.getCurrentPosition(sendCoords, sendError, {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0
+        });
+        </script>
+        """,
+        height=0,  # invisible
+    )
 
-    if raw is None:
-        st.info("⌛ Esperando respuesta del navegador...")
-    elif isinstance(raw, str):
+    # Recibir valor desde componente
+    geo_raw = st.experimental_get_query_params().get("streamlit_component_value", [None])[0]
+
+    if geo_raw:
         try:
-            res = json.loads(raw)
+            res = json.loads(geo_raw)
         except Exception:
-            st.error(f"⚠️ No se pudo parsear la respuesta: {raw}")
+            st.error(f"⚠️ No se pudo parsear la respuesta del navegador: {geo_raw}")
             res = {}
 
         if res.get("error"):
-            st.warning(f"⚠️ No se obtuvo ubicación desde el navegador: {res['error']}")
+            st.warning(f"⚠️ Error navegador: {res['error']}")
             log_access(lat=None, lon=None)
             st.session_state.access_logged = True
         elif "lat" in res and "lon" in res:
-            lat = float(res["lat"])
-            lon = float(res["lon"])
+            lat, lon = float(res["lat"]), float(res["lon"])
             acc = res.get("accuracy")
-            st.success(f"📍 Ubicación detectada: lat {lat:.6f}, lon {lon:.6f} (±{acc} m)")
+            st.success(f"📍 Ubicación detectada: {lat:.6f}, {lon:.6f} (±{acc} m)")
             log_access(lat=lat, lon=lon)
+            st.session_state.geo_data = res
             st.session_state.access_logged = True
         else:
-            st.error(f"❌ Respuesta inesperada tras parseo: {res}")
+            st.error(f"❌ Respuesta inesperada: {res}")
     else:
-        st.error(f"❌ Tipo inesperado recibido: {type(raw)} valor={raw}")
+        st.info("⌛ Esperando respuesta del navegador...")
 
 # =========================
-# Inspector de estado
+# Inspector
 # =========================
 st.subheader("🔍 Inspector de estado")
 
-st.write(f"**Último Hash:** {st.session_state.last_hash or 'N/A'}")
-st.write(
-    f"**Última verificación:** "
-    f"{st.session_state.last_checked if st.session_state.last_checked > datetime.min else 'Nunca'}"
-)
+st.json(st.session_state.geo_data or {"geo": "No detectado"})
 
 image_bytes = get_image_bytes(st.session_state.photo_url) if st.session_state.photo_url else None
 if image_bytes:
@@ -112,22 +110,24 @@ else:
         st.info("✅ URL actualizada. Presiona 'Verificar actualización'.")
 
 # =========================
-# Historial de accesos
+# Historial
 # =========================
 st.subheader("📜 Historial de accesos recientes")
 logs = get_access_logs(limit=10)
 data = []
 for log in logs:
     fecha = log.get("fecha").strftime("%Y-%m-%d %H:%M:%S")
-    lat = log.get("latitud")
-    lon = log.get("longitud")
-    data.append({"Fecha": fecha, "Latitud": lat, "Longitud": lon})
+    data.append({
+        "Fecha": fecha,
+        "Latitud": log.get("latitud"),
+        "Longitud": log.get("longitud")
+    })
 
 df_logs = pd.DataFrame(data)
 st.dataframe(df_logs)
 
 # =========================
-# Botón verificación
+# Botón de verificación
 # =========================
 min_interval = timedelta(minutes=10)
 if st.button("Verificar actualización"):
@@ -144,9 +144,7 @@ if st.button("Verificar actualización"):
             st.session_state.notified_hash = current_hash
             save_photo(st.session_state.photo_url, current_hash)
             try:
-                sid = send_whatsapp(
-                    f"📸 Nueva foto detectada: {st.session_state.photo_url}"
-                )
+                sid = send_whatsapp(f"📸 Nueva foto detectada: {st.session_state.photo_url}")
                 st.success(f"✅ Notificación enviada! SID: {sid}")
             except Exception as e:
                 st.error(f"❌ No se pudo enviar la notificación: {e}")
