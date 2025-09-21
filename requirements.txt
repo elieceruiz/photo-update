@@ -2,8 +2,6 @@
 streamlit
 pymongo
 requests
-beautifulsoup4
-twilio
 pytz
 pandas
-streamlit-geolocation
+streamlit-js-eval
