@@ -1,11 +1,8 @@
-# notifier.py
+# notifier
 import streamlit as st
 from twilio.rest import Client
 
 def send_whatsapp(message: str):
-    """
-    Envía mensaje WhatsApp usando Twilio.
-    """
     client = Client(
         st.secrets["twilio"]["account_sid"],
         st.secrets["twilio"]["auth_token"]
@@ -16,3 +13,9 @@ def send_whatsapp(message: str):
         to=f"whatsapp:{st.secrets['twilio']['to_number']}"
     )
     return msg.sid
+
+def notify_if_image_error(error_message: str):
+    try:
+        send_whatsapp(f"Error con la foto: {error_message}")
+    except Exception as e:
+        st.error(f"No se pudo enviar notificación: {e}")
