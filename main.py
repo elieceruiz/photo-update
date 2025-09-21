@@ -7,10 +7,12 @@ from checker import get_image_bytes, has_photo_changed
 from db import save_photo, get_last_hash, get_last_photo_url
 from notifier import send_whatsapp
 from logs import log_access, get_access_logs
-from location import get_location_google
+
+# 📌 nuevo import
+from streamlit_javascript import st_javascript
 
 st.set_page_config(page_title="Photo Update", layout="centered")
-st.title("📸 Photo Update")
+st.title("📸 Photo Update con ubicación desde navegador")
 
 # =========================
 # Estados iniciales
@@ -27,35 +29,49 @@ if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
 
 # =========================
-# Bloque de debug de API Key
-# =========================
-st.subheader("🛠️ Debug API Key")
-if "googlemaps" in st.secrets and "google_maps_api_key" in st.secrets["googlemaps"]:
-    api_key_debug = st.secrets["googlemaps"]["google_maps_api_key"]
-    st.info(f"🔑 API Key detectada (primeros 8): {api_key_debug[:8]}********")
-else:
-    st.error("❌ No se encontró la API Key en st.secrets['googlemaps']['google_maps_api_key']")
-
-# Botón de prueba directa de API Key
-if st.button("Probar API Key (sin logs)"):
-    lat, lon, acc = get_location_google()
-    if lat and lon:
-        st.success(f"✅ Google respondió: lat {lat:.6f}, lon {lon:.6f} (±{acc} m)")
-    else:
-        st.error("❌ Google no devolvió ubicación válida")
-
-# =========================
-# Detectar ubicación (Google) normal
+# Detección de ubicación con JS
 # =========================
 if not st.session_state.access_logged:
-    with st.spinner("Detectando ubicación con Google..."):
-        lat, lon, acc = get_location_google()
-        if lat and lon:
-            log_access(lat=lat, lon=lon)
-            st.success(f"📍 Ubicación detectada: lat {lat:.6f}, lon {lon:.6f} (±{acc} m)")
-        else:
-            log_access(lat=None, lon=None)
-            st.warning("⚠️ No se pudo obtener la ubicación con Google.")
+    st.info("Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
+
+    js_code = """
+    (async () => {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+          resolve({ error: "no_support" });
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            resolve({
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+              accuracy: pos.coords.accuracy
+            });
+          },
+          (err) => {
+            resolve({ error: err.message || err.code });
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      });
+    })();
+    """
+
+    res = st_javascript(js_code, key="geo_js")
+
+    if res is None:
+        st.info("⌛ Esperando respuesta del navegador...")
+    elif isinstance(res, dict) and res.get("error"):
+        st.warning(f"⚠️ No se obtuvo ubicación desde el navegador: {res.get('error')}")
+        log_access(lat=None, lon=None)
+        st.session_state.access_logged = True
+    else:
+        lat = float(res["lat"])
+        lon = float(res["lon"])
+        acc = res.get("accuracy")
+        st.success(f"📍 Ubicación detectada: lat {lat:.6f}, lon {lon:.6f} (±{acc} m)")
+        log_access(lat=lat, lon=lon)
         st.session_state.access_logged = True
 
 # =========================
