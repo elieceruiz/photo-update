@@ -4,7 +4,7 @@ from pymongo import MongoClient
 import hashlib
 import requests
 import pytz
-from datetime import datetime, timedelta
+from datetime import datetime
 from streamlit_js_eval import get_geolocation
 import pandas as pd
 
@@ -19,9 +19,8 @@ MONGO_URI = st.secrets.get("mongodb", {}).get("uri", "")
 DB_NAME = st.secrets.get("mongodb", {}).get("db", "photo_update_db")
 COLLECTION = st.secrets.get("mongodb", {}).get("collection", "history")
 
-# Semilla inicial desde secrets.toml
-INITIAL_URL = st.secrets.get("initial_photo", {}).get("url", "")
-INITIAL_HASH = st.secrets.get("initial_photo", {}).get("hash", "")
+SEED_URL = st.secrets.get("initial_photo", {}).get("url", "")
+SEED_HASH = st.secrets.get("initial_photo", {}).get("hash", "")
 
 client = MongoClient(MONGO_URI) if MONGO_URI else None
 db = client[DB_NAME] if client else None
@@ -30,28 +29,40 @@ db = client[DB_NAME] if client else None
 # HELPERS
 # =========================
 def download_image(url: str) -> bytes:
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        return resp.content
-    except Exception as e:
-        raise RuntimeError(f"Error al descargar imagen: {e}")
+    st.write(f"🌐 [DEBUG] Intentando descargar: {url}")
+    resp = requests.get(url, timeout=10)
+    resp.raise_for_status()
+    st.success(f"✅ [DEBUG] Imagen descargada con {len(resp.content)} bytes")
+    return resp.content
 
 def calculate_hash(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()
+    h = hashlib.sha256(content).hexdigest()
+    st.write(f"🔑 [DEBUG] Hash calculado: {h}")
+    return h
 
 def log_access(lat=None, lon=None):
     if db is not None:
-        db.access_log.insert_one({
+        db["access_log"].insert_one({
             "ts": datetime.now(colombia),
             "lat": lat,
             "lon": lon
         })
 
-def get_last_photo():
-    if db is not None:
-        return db[COLLECTION].find_one(sort=[("_id", -1)])
-    return None
+def ensure_seed():
+    """Si la colección está vacía, insertar la semilla inicial."""
+    if db and db[COLLECTION].count_documents({}) == 0 and SEED_URL:
+        st.warning("⚠️ [DEBUG] Base vacía, insertando semilla inicial...")
+        try:
+            img = download_image(SEED_URL)
+            h = SEED_HASH or calculate_hash(img)
+            db[COLLECTION].insert_one({
+                "photo_url": SEED_URL,
+                "hash": h,
+                "checked_at": datetime.now(colombia)
+            })
+            st.success("🌱 [DEBUG] Semilla insertada en MongoDB.")
+        except Exception as e:
+            st.error(f"❌ [DEBUG] Error insertando semilla: {e}")
 
 # =========================
 # STATE INIT
@@ -60,8 +71,6 @@ if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
 if "geo_data" not in st.session_state:
     st.session_state.geo_data = None
-if "last_checked" not in st.session_state:
-    st.session_state.last_checked = datetime.min
 
 # =========================
 # UI HEADER
@@ -95,77 +104,57 @@ if not st.session_state.access_logged:
         st.info("⌛ Esperando respuesta del navegador...")
 
 # =========================
-# DB: LATEST PHOTO OR INITIAL
+# DB: LATEST PHOTO
 # =========================
-latest = get_last_photo()
+ensure_seed()
 
-# Si DB está vacía y hay semilla, insertarla
-if not latest and INITIAL_URL and INITIAL_HASH and db is not None:
-    db[COLLECTION].insert_one({
-        "photo_url": INITIAL_URL,
-        "hash": INITIAL_HASH,
-        "checked_at": datetime.now(colombia),
-        "lat": st.session_state.geo_data["lat"] if st.session_state.geo_data else None,
-        "lon": st.session_state.geo_data["lon"] if st.session_state.geo_data else None,
-        "source": "seed"
-    })
-    latest = get_last_photo()
-    st.success("🌱 Foto inicial registrada desde secrets.toml.")
+latest = None
+if db:
+    latest = db[COLLECTION].find_one(sort=[("_id", -1)])
 
-# Mostrar inspector
 if latest:
     st.subheader("🔍 Inspector de estado")
     st.json({
         "Último Hash": latest.get("hash"),
-        "Última verificación": latest.get("checked_at", "Nunca"),
-        "Ubicación": st.session_state.geo_data if st.session_state.geo_data else "No detectado",
-        "Total cambios": db[COLLECTION].count_documents({})
+        "Última verificación": str(latest.get("checked_at", "Nunca")),
+        "Ubicación": st.session_state.geo_data if st.session_state.geo_data else "No detectado"
     })
 
-# Mostrar miniatura
-photo_url = latest["photo_url"] if latest else INITIAL_URL
-if photo_url:
-    st.image(photo_url, caption="Miniatura actual")
+    st.write(f"🖼️ [DEBUG] URL actual: {latest['photo_url']}")
+    try:
+        st.image(latest["photo_url"], caption="Miniatura actual")
+    except Exception as e:
+        st.error(f"❌ [DEBUG] No se pudo renderizar la imagen: {e}")
 else:
-    st.warning("⚠️ No hay URL de foto configurada ni registro previo en Mongo.")
+    st.warning("⚠️ No hay fotos registradas todavía en la base de datos.")
 
 # =========================
 # CHECK & UPDATE
 # =========================
-min_interval = timedelta(minutes=10)
-
 if st.button("🔄 Verificar foto ahora"):
-    now = datetime.now(colombia)
-    if now - st.session_state.last_checked < min_interval:
-        st.warning(f"⌛ Espera {int(min_interval.total_seconds()/60)} minutos entre chequeos.")
+    if not SEED_URL:
+        st.error("❌ No hay URL de foto configurada en secrets.toml ([initial_photo])")
     else:
-        st.session_state.last_checked = now
-        if not photo_url:
-            st.error("❌ No hay URL de foto configurada ni en secrets.toml ni en Mongo.")
-        else:
-            try:
-                img = download_image(photo_url)
-                new_hash = calculate_hash(img)
+        try:
+            img = download_image(SEED_URL)
+            new_hash = calculate_hash(img)
 
-                if not latest or new_hash != latest["hash"]:
-                    db[COLLECTION].insert_one({
-                        "photo_url": photo_url,
-                        "hash": new_hash,
-                        "checked_at": datetime.now(colombia),
-                        "lat": st.session_state.geo_data["lat"] if st.session_state.geo_data else None,
-                        "lon": st.session_state.geo_data["lon"] if st.session_state.geo_data else None,
-                        "source": "manual"
-                    })
-                    st.success("✅ Nueva foto detectada y guardada en MongoDB.")
-                else:
-                    st.info("ℹ️ No hubo cambios en la foto.")
-            except Exception as e:
-                st.error(f"❌ Error al verificar foto: {e}")
+            if not latest or new_hash != latest["hash"]:
+                db[COLLECTION].insert_one({
+                    "photo_url": SEED_URL,
+                    "hash": new_hash,
+                    "checked_at": datetime.now(colombia)
+                })
+                st.success("✅ Nueva foto detectada y guardada en MongoDB.")
+            else:
+                st.info("ℹ️ No hubo cambios en la foto.")
+        except Exception as e:
+            st.error(f"❌ Error al verificar foto: {e}")
 
 # =========================
 # HISTORIAL DE ACCESOS
 # =========================
-if db is not None:
+if db:
     st.subheader("📜 Historial de accesos recientes")
     logs = list(db.access_log.find().sort("ts", -1).limit(10))
     if logs:
