@@ -10,7 +10,7 @@ from logs import log_access, get_access_logs
 from location import get_location_google
 
 st.set_page_config(page_title="Photo Update", layout="centered")
-st.title("📸 Photo Update (con Debug)")
+st.title("📸 Photo Update")
 
 # =========================
 # Estados iniciales
