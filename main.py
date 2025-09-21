@@ -72,9 +72,9 @@ if "access_logged" not in st.session_state:
 # =========================
 st.write("🌍 Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
 
-geo_data = st.experimental_get_query_params().get("geo", [None])[0]
+# ⚡ Ahora con st.query_params en lugar de experimental
+geo_data = st.query_params.get("geo", [None])[0]
 debug_info = {"geo": geo_data if geo_data else "No detectado"}
-
 st.json(debug_info)
 
 if geo_data and not st.session_state.access_logged:
