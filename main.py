@@ -1,5 +1,4 @@
 # main.py
-# main.py
 import streamlit as st
 from pymongo import MongoClient
 import hashlib
@@ -28,16 +27,12 @@ db = client[DB_NAME] if client else None
 # HELPERS
 # =========================
 def download_image(url: str) -> bytes:
-    st.write(f"🌐 [DEBUG] Intentando descargar: {url}")
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
-    st.success(f"✅ [DEBUG] Imagen descargada con {len(resp.content)} bytes")
     return resp.content
 
 def calculate_hash(content: bytes) -> str:
-    h = hashlib.sha256(content).hexdigest()
-    st.write(f"🔑 [DEBUG] Hash calculado: {h}")
-    return h
+    return hashlib.sha256(content).hexdigest()
 
 def log_access(lat=None, lon=None):
     if db:
@@ -101,12 +96,7 @@ if latest:
         "Ubicación": st.session_state.geo_data if st.session_state.geo_data else "No detectado"
     })
 
-    # DEBUG Foto
-    st.write(f"🖼️ [DEBUG] URL usada: {latest['photo_url']}")
-    try:
-        st.image(latest["photo_url"], caption="Miniatura actual")
-    except Exception as e:
-        st.error(f"❌ [DEBUG] No se pudo renderizar la imagen: {e}")
+    st.image(latest["photo_url"], caption="Miniatura actual")
 else:
     st.warning("⚠️ No hay fotos registradas todavía en la base de datos.")
 
