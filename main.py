@@ -52,7 +52,7 @@ if "geo_data" not in st.session_state:
 # =========================
 # UI HEADER
 # =========================
-st.title("📸 Photo Update")
+st.title("📸 Update")
 
 # =========================
 # GEOLOCATION
