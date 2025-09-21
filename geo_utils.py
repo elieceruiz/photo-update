@@ -1,4 +1,12 @@
 # geo_utils.py
+def decimal_a_gms(decimal_coord):
+    grados = int(decimal_coord)
+    decimales = abs(decimal_coord - grados)
+    minutos_dec = decimales * 60
+    minutos = int(minutos_dec)
+    segundos = (minutos_dec - minutos) * 60
+    return grados, minutos, segundos
+
 def hemisferio_latitud(lat):
     return 'N' if lat >= 0 else 'S'
 
