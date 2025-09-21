@@ -2,13 +2,14 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
+import json  # 👈 nuevo, para parsear respuesta JS
 
 from checker import get_image_bytes, has_photo_changed
 from db import save_photo, get_last_hash, get_last_photo_url
 from notifier import send_whatsapp
 from logs import log_access, get_access_logs
 
-# 📌 nuevo import
+# 📌 import librería para usar JS en el front
 from streamlit_javascript import st_javascript
 
 st.set_page_config(page_title="Photo Update", layout="centered")
@@ -29,7 +30,7 @@ if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
 
 # =========================
-# Detección de ubicación con JS
+# Detección de ubicación con JS (navigator.geolocation)
 # =========================
 if not st.session_state.access_logged:
     st.info("Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
@@ -38,19 +39,19 @@ if not st.session_state.access_logged:
     (async () => {
       return new Promise((resolve) => {
         if (!navigator.geolocation) {
-          resolve({ error: "no_support" });
+          resolve({ "error": "no_support" });
           return;
         }
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            resolve({
-              lat: pos.coords.latitude,
-              lon: pos.coords.longitude,
-              accuracy: pos.coords.accuracy
-            });
+            resolve(JSON.stringify({
+              "lat": pos.coords.latitude,
+              "lon": pos.coords.longitude,
+              "accuracy": pos.coords.accuracy
+            }));
           },
           (err) => {
-            resolve({ error: err.message || err.code });
+            resolve(JSON.stringify({ "error": err.message || err.code }));
           },
           { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
@@ -62,17 +63,28 @@ if not st.session_state.access_logged:
 
     if res is None:
         st.info("⌛ Esperando respuesta del navegador...")
-    elif isinstance(res, dict) and res.get("error"):
-        st.warning(f"⚠️ No se obtuvo ubicación desde el navegador: {res.get('error')}")
-        log_access(lat=None, lon=None)
-        st.session_state.access_logged = True
     else:
-        lat = float(res["lat"])
-        lon = float(res["lon"])
-        acc = res.get("accuracy")
-        st.success(f"📍 Ubicación detectada: lat {lat:.6f}, lon {lon:.6f} (±{acc} m)")
-        log_access(lat=lat, lon=lon)
-        st.session_state.access_logged = True
+        # 🔎 Parsear si viene como string JSON
+        if isinstance(res, str):
+            try:
+                res = json.loads(res)
+            except Exception:
+                st.error(f"⚠️ Respuesta inesperada (string no JSON): {res}")
+                res = {}
+
+        if isinstance(res, dict) and res.get("error"):
+            st.warning(f"⚠️ No se obtuvo ubicación desde el navegador: {res.get('error')}")
+            log_access(lat=None, lon=None)
+            st.session_state.access_logged = True
+        elif isinstance(res, dict) and "lat" in res and "lon" in res:
+            lat = float(res["lat"])
+            lon = float(res["lon"])
+            acc = res.get("accuracy")
+            st.success(f"📍 Ubicación detectada: lat {lat:.6f}, lon {lon:.6f} (±{acc} m)")
+            log_access(lat=lat, lon=lon)
+            st.session_state.access_logged = True
+        else:
+            st.error(f"❌ Respuesta inesperada del navegador: {res}")
 
 # =========================
 # Inspector de estado
