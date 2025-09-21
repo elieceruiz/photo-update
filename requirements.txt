@@ -1,5 +1,4 @@
 # requirements.txt
-googlemaps
 streamlit
 pymongo
 requests
