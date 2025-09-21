@@ -4,8 +4,8 @@ import streamlit as st
 
 def get_location_google():
     """
-    Usa la API de Google Maps Geolocation para obtener lat/lon actuales.
-    Retorna (lat: float, lon: float, accuracy: float | None).
+    Obtiene lat/lon actuales usando Google Geolocation API.
+    Retorna (lat, lon, accuracy) o (None, None, None) si falla.
     """
     api_key = st.secrets["googlemaps"]["google_maps_api_key"]
     url = f"https://www.googleapis.com/geolocation/v1/geolocate?key={api_key}"
