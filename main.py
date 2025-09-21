@@ -74,7 +74,7 @@ if not st.session_state.access_logged:
 
         elif "error" in geo:
             st.warning(f"⚠️ Error navegador: {geo['error']}")
-            log_access(lat=None, lon=None)
+            log_access(lat=None, lon=None, acc=None)
             st.session_state.access_logged = True
     else:
         st.info("⌛ Esperando respuesta del navegador...")
@@ -93,6 +93,7 @@ if latest:
         "Última verificación": latest.get("checked_at", "Nunca"),
         "Ubicación": st.session_state.geo_data if st.session_state.geo_data else "No detectado"
     })
+
     st.image(latest["photo_url"], caption="Miniatura actual")
 else:
     st.warning("⚠️ No hay fotos registradas todavía en la base de datos.")
@@ -102,13 +103,13 @@ else:
 # =========================
 if st.button("🔄 Verificar foto ahora"):
     if not latest:
-        st.error("❌ No hay foto inicial en la base de datos.")
+        st.error("❌ No hay foto inicial en MongoDB (collection history). Inserta al menos una manualmente.")
     else:
         try:
             img = download_image(latest["photo_url"])
             new_hash = calculate_hash(img)
 
-            if not latest or new_hash != latest["hash"]:
+            if new_hash != latest["hash"]:
                 db[COLLECTION].insert_one({
                     "photo_url": latest["photo_url"],
                     "hash": new_hash,
@@ -125,15 +126,26 @@ if st.button("🔄 Verificar foto ahora"):
 # =========================
 if db is not None:
     st.subheader("📜 Historial de accesos recientes")
-    logs = list(db.access_log.find().sort("ts", -1).limit(10))
+    logs = list(db.access_log.find().sort("ts", -1))
     if logs:
-        df = pd.DataFrame([{
-            "Fecha": l["ts"].strftime("%d %b %y"),
-            "Lat": l.get("lat"),
-            "Lon": l.get("lon"),
-            "±m": l.get("acc")
-        } for l in logs])
-        # Reordenar para que el más antiguo quede abajo con índice 1
-        df = df.iloc[::-1].reset_index(drop=True)
-        df.index = df.index + 1
-        st.dataframe(df)
+        total = len(logs)
+        data = []
+        for idx, log in enumerate(logs):
+            ts = log.get("ts")
+            if isinstance(ts, datetime):
+                ts = ts.astimezone(colombia).strftime("%d %B %y")  # ej: 20 Septiembre 25
+
+            lat = log.get("lat")
+            lon = log.get("lon")
+            acc = log.get("acc")
+
+            data.append({
+                "#": total - idx,
+                "Fecha": ts,
+                "Lat": f"{lat:.6f}" if lat else None,
+                "Lon": f"{lon:.6f}" if lon else None,
+                "±m": f"{int(acc)}" if acc else None
+            })
+
+        df = pd.DataFrame(data)
+        st.dataframe(df, use_container_width=True)
