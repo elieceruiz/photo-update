@@ -87,6 +87,16 @@ latest = None
 if db is not None:
     latest = db[COLLECTION].find_one(sort=[("_id", -1)])
 
+    # 🚀 Si no hay fotos en DB, insertar semilla desde secrets
+    if latest is None and SEED_URL:
+        db[COLLECTION].insert_one({
+            "photo_url": SEED_URL,
+            "hash": SEED_HASH or "",
+            "checked_at": datetime.now(colombia)
+        })
+        latest = db[COLLECTION].find_one(sort=[("_id", -1)])
+        st.success("🌱 Foto inicial sembrada en MongoDB.")
+
 if latest:
     st.subheader("🔍 Inspector de estado")
     st.json({
@@ -95,9 +105,15 @@ if latest:
         "Ubicación": st.session_state.geo_data if st.session_state.geo_data else "No detectado"
     })
 
-    st.image(latest["photo_url"], caption="Miniatura actual")
+    # 🖼️ Debug visual de foto
+    st.write(f"🖼️ URL usada: {latest['photo_url']}")
+    try:
+        img_bytes = download_image(latest["photo_url"])
+        st.image(img_bytes, caption="Miniatura actual")
+    except Exception as e:
+        st.error(f"❌ No se pudo cargar la imagen: {e}")
 else:
-    st.warning("⚠️ No hay fotos registradas todavía en la base de datos.")
+    st.warning("⚠️ No hay fotos registradas ni en DB ni en secrets.")
 
 # =========================
 # CHECK & UPDATE
