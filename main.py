@@ -1,138 +1,153 @@
 # main.py
 import streamlit as st
+from datetime import datetime, timedelta
 from pymongo import MongoClient
-import hashlib
-import requests
-import pytz
-from datetime import datetime
-from streamlit_js_eval import get_geolocation
+from checker import get_image_bytes, has_photo_changed
+from notifier import send_whatsapp
 import pandas as pd
+import pytz
+import json
 
 # =========================
-# CONFIG
+# CONFIGURACIÓN
 # =========================
-st.set_page_config(page_title="Photo Update", layout="centered")
+st.set_page_config(page_title="📸 Photo Update", layout="centered")
+st.title("📸 Photo Update")
 
 colombia = pytz.timezone("America/Bogota")
 
-MONGO_URI = st.secrets.get("mongodb", {}).get("uri", "")
-DB_NAME = st.secrets.get("mongodb", {}).get("db", "photo_update_db")
-COLLECTION = st.secrets.get("mongodb", {}).get("collection", "history")
-SEED_URL = st.secrets.get("seed", {}).get("photo_url", "")
+# =========================
+# CONEXIÓN DB
+# =========================
+MONGO_URI = st.secrets["mongodb"]["uri"]
+DB_NAME = st.secrets["mongodb"]["db"]
+COLLECTION = st.secrets["mongodb"].get("collection", "history")
 
-client = MongoClient(MONGO_URI) if MONGO_URI else None
+@st.cache_resource
+def get_client():
+    return MongoClient(MONGO_URI)
+
+client = get_client()
 db = client[DB_NAME] if client else None
 
 # =========================
-# HELPERS
+# FUNCIONES
 # =========================
-def download_image(url: str) -> bytes:
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
-    return resp.content
-
-def calculate_hash(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()
-
 def log_access(lat=None, lon=None):
-    if db:
+    if db is not None:
         db.access_log.insert_one({
             "ts": datetime.now(colombia),
             "lat": lat,
             "lon": lon
         })
 
+def get_last_photo():
+    if db is not None:
+        latest = db[COLLECTION].find_one(sort=[("_id", -1)])
+        return latest
+    return None
+
 # =========================
-# STATE INIT
+# ESTADOS INICIALES
 # =========================
+if "last_hash" not in st.session_state:
+    last = get_last_photo()
+    st.session_state.last_hash = last["hash"] if last else None
+
+if "photo_url" not in st.session_state:
+    last = get_last_photo()
+    st.session_state.photo_url = last["photo_url"] if last else st.secrets.get("seed", {}).get("photo_url", "")
+
+if "notified_hash" not in st.session_state:
+    st.session_state.notified_hash = None
+
+if "last_checked" not in st.session_state:
+    st.session_state.last_checked = datetime.min
+
 if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
-if "geo_data" not in st.session_state:
-    st.session_state.geo_data = None
 
 # =========================
-# UI HEADER
+# GEOLOCALIZACIÓN (FRONT)
 # =========================
-st.title("📸 Photo Update")
+st.write("🌍 Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
 
-# =========================
-# GEOLOCATION
-# =========================
-if not st.session_state.access_logged:
-    st.info("🌍 Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
+geo_data = st.experimental_get_query_params().get("geo", [None])[0]
+debug_info = {"geo": geo_data if geo_data else "No detectado"}
 
-    geo = get_geolocation()
+st.json(debug_info)
 
-    if geo:
-        if "coords" in geo:
-            lat = geo["coords"]["latitude"]
-            lon = geo["coords"]["longitude"]
-            acc = geo["coords"].get("accuracy", "?")
-
-            st.success(f"📍 Ubicación detectada: {lat:.6f}, {lon:.6f} (±{acc} m)")
-            log_access(lat=lat, lon=lon)
-            st.session_state.geo_data = {"lat": lat, "lon": lon, "accuracy": acc}
-            st.session_state.access_logged = True
-
-        elif "error" in geo:
-            st.warning(f"⚠️ Error navegador: {geo['error']}")
-            log_access(lat=None, lon=None)
-            st.session_state.access_logged = True
-    else:
-        st.info("⌛ Esperando respuesta del navegador...")
+if geo_data and not st.session_state.access_logged:
+    try:
+        res = json.loads(geo_data)
+        lat = float(res["lat"])
+        lon = float(res["lon"])
+        acc = res.get("accuracy", None)
+        st.success(f"📍 Ubicación detectada: {lat}, {lon} (±{acc} m)")
+        log_access(lat=lat, lon=lon)
+        st.session_state.access_logged = True
+    except Exception as e:
+        st.error(f"⚠️ No se pudo parsear ubicación: {e}")
 
 # =========================
-# DB: LATEST PHOTO
+# MOSTRAR MINIATURA INSTAGRAM
 # =========================
-latest = None
-if db:
-    latest = db[COLLECTION].find_one(sort=[("_id", -1)])
-
-if latest:
-    st.subheader("🔍 Inspector de estado")
-    st.json({
-        "Último Hash": latest.get("hash"),
-        "Última verificación": latest.get("checked_at", "Nunca"),
-        "Ubicación": st.session_state.geo_data if st.session_state.geo_data else "No detectado"
-    })
-
-    st.image(latest["photo_url"], caption="Miniatura actual")
+image_bytes = get_image_bytes(st.session_state.photo_url) if st.session_state.photo_url else None
+if image_bytes:
+    st.image(image_bytes, caption="Miniatura actual")
 else:
-    st.warning("⚠️ No hay fotos registradas todavía en la base de datos.")
-
-# =========================
-# CHECK & UPDATE
-# =========================
-if st.button("🔄 Verificar foto ahora"):
-    if not SEED_URL:
-        st.error("❌ No hay URL de foto configurada en secrets.toml ([seed])")
-    else:
-        try:
-            img = download_image(SEED_URL)
-            new_hash = calculate_hash(img)
-
-            if not latest or new_hash != latest["hash"]:
-                db[COLLECTION].insert_one({
-                    "photo_url": SEED_URL,
-                    "hash": new_hash,
-                    "checked_at": datetime.now(colombia)
-                })
-                st.success("✅ Nueva foto detectada y guardada en MongoDB.")
-            else:
-                st.info("ℹ️ No hubo cambios en la foto.")
-        except Exception as e:
-            st.error(f"❌ Error al verificar foto: {e}")
+    st.warning("⚠️ No se pudo cargar la miniatura desde la URL guardada.")
+    nueva_url = st.text_input("🔗 Ingrese nueva URL de miniatura Instagram")
+    if nueva_url and nueva_url != st.session_state.photo_url:
+        st.session_state.photo_url = nueva_url
+        st.info("✅ URL actualizada. Presiona 'Verificar actualización'.")
 
 # =========================
 # HISTORIAL DE ACCESOS
 # =========================
-if db:
+if db is not None:
     st.subheader("📜 Historial de accesos recientes")
     logs = list(db.access_log.find().sort("ts", -1).limit(10))
-    if logs:
-        df = pd.DataFrame([{
-            "Fecha": l["ts"].strftime("%Y-%m-%d %H:%M:%S"),
-            "Lat": l.get("lat"),
-            "Lon": l.get("lon")
-        } for l in logs])
-        st.dataframe(df)
+    data = []
+    for log in logs:
+        fecha = log.get("ts").strftime("%Y-%m-%d %H:%M:%S")
+        lat = log.get("lat")
+        lon = log.get("lon")
+        data.append({"Fecha": fecha, "Latitud": lat, "Longitud": lon})
+    if data:
+        df_logs = pd.DataFrame(data)
+        st.dataframe(df_logs)
+
+# =========================
+# BOTÓN: VERIFICAR CAMBIOS
+# =========================
+min_interval = timedelta(minutes=10)
+if st.button("🔍 Verificar actualización"):
+    now = datetime.now(colombia)
+    if now - st.session_state.last_checked < min_interval:
+        st.warning(f"⌛ Espera {int(min_interval.total_seconds()/60)} minutos entre chequeos.")
+    else:
+        st.session_state.last_checked = now
+        changed, current_hash = has_photo_changed(st.session_state.photo_url, st.session_state.last_hash)
+        if changed and st.session_state.notified_hash != current_hash:
+            st.session_state.last_hash = current_hash
+            st.session_state.notified_hash = current_hash
+            if db is not None:
+                db[COLLECTION].insert_one({
+                    "photo_url": st.session_state.photo_url,
+                    "hash": current_hash,
+                    "ts": datetime.now(colombia)
+                })
+            try:
+                sid = send_whatsapp(f"📸 Nueva foto detectada: {st.session_state.photo_url}")
+                st.success(f"✅ Notificación enviada! SID: {sid}")
+            except Exception as e:
+                st.error(f"❌ No se pudo enviar notificación: {e}")
+        else:
+            st.info("ℹ️ No hay cambios en la foto o ya se notificó esta imagen.")
+
+# =========================
+# ÚLTIMA VERIFICACIÓN
+# =========================
+if st.session_state.last_checked > datetime.min:
+    st.write(f"🕒 Última verificación: {st.session_state.last_checked.strftime('%Y-%m-%d %H:%M:%S')}")
