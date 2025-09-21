@@ -12,7 +12,7 @@ from logs import log_access, get_access_logs
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Photo Update", layout="centered")
-st.title("📸 Photo Update con ubicación desde navegador (Plan B)")
+st.title("📸 Photo Update con ubicación desde navegador (JS directo)")
 
 # =========================
 # Estados iniciales
@@ -29,6 +29,8 @@ if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
 if "geo_data" not in st.session_state:
     st.session_state.geo_data = None
+if "geo_raw" not in st.session_state:
+    st.session_state.geo_raw = None
 
 # =========================
 # Detección de ubicación con HTML + JS
@@ -46,14 +48,12 @@ if not st.session_state.access_logged:
                 lon: pos.coords.longitude,
                 accuracy: pos.coords.accuracy
             };
-            const streamlitEvent = new CustomEvent("streamlit:setComponentValue", {detail: JSON.stringify(data)});
-            window.parent.document.dispatchEvent(streamlitEvent);
+            Streamlit.setComponentValue(JSON.stringify(data)); // ✅ mandar JSON
         };
 
         const sendError = (err) => {
             const data = {error: err.message || err.code};
-            const streamlitEvent = new CustomEvent("streamlit:setComponentValue", {detail: JSON.stringify(data)});
-            window.parent.document.dispatchEvent(streamlitEvent);
+            Streamlit.setComponentValue(JSON.stringify(data)); // ✅ mandar error
         };
 
         navigator.geolocation.getCurrentPosition(sendCoords, sendError, {
@@ -63,13 +63,14 @@ if not st.session_state.access_logged:
         });
         </script>
         """,
-        height=0,  # invisible
+        height=0,
     )
 
-    # Recibir valor desde componente
-    geo_raw = st.experimental_get_query_params().get("streamlit_component_value", [None])[0]
+    # Recibir valor
+    geo_raw = st.session_state.get("component_value")
 
     if geo_raw:
+        st.session_state.geo_raw = geo_raw  # guardar crudo para debug
         try:
             res = json.loads(geo_raw)
         except Exception:
@@ -93,12 +94,15 @@ if not st.session_state.access_logged:
         st.info("⌛ Esperando respuesta del navegador...")
 
 # =========================
-# Inspector
+# Inspector de estado
 # =========================
 st.subheader("🔍 Inspector de estado")
-
+st.write("**Crudo navegador:**", st.session_state.geo_raw)
 st.json(st.session_state.geo_data or {"geo": "No detectado"})
 
+# =========================
+# Foto
+# =========================
 image_bytes = get_image_bytes(st.session_state.photo_url) if st.session_state.photo_url else None
 if image_bytes:
     st.image(image_bytes, caption="Miniatura actual")
@@ -127,7 +131,7 @@ df_logs = pd.DataFrame(data)
 st.dataframe(df_logs)
 
 # =========================
-# Botón de verificación
+# Botón verificación
 # =========================
 min_interval = timedelta(minutes=10)
 if st.button("Verificar actualización"):
