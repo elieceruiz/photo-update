@@ -13,21 +13,21 @@ def get_client():
 
 def get_db():
     client = get_client()
-    if client:
+    if client is not None:
         db_name = st.secrets.get("mongodb", {}).get("db", "photo_update_db")
         return client[db_name]
     return None
 
 def get_collection():
     db = get_db()
-    if db:
+    if db is not None:
         col_name = st.secrets.get("mongodb", {}).get("collection", "history")
         return db[col_name]
     return None
 
 def insert_access_log(lat, lon, acc):
     db = get_db()
-    if db:
+    if db is not None:
         db.access_log.insert_one({
             "ts": datetime.now(colombia),
             "lat": lat,
@@ -37,13 +37,13 @@ def insert_access_log(lat, lon, acc):
 
 def get_latest_record():
     col = get_collection()
-    if col:
+    if col is not None:
         return col.find_one(sort=[("_id", -1)])
     return None
 
 def insert_photo_record(photo_url, hash_value):
     col = get_collection()
-    if col:
+    if col is not None:
         col.insert_one({
             "photo_url": photo_url,
             "hash": hash_value,
@@ -52,7 +52,7 @@ def insert_photo_record(photo_url, hash_value):
 
 def get_access_logs(limit=100):
     db = get_db()
-    if db:
+    if db is not None:
         cursor = db.access_log.find().sort("ts", 1).limit(limit)
         return list(cursor)
     return []
