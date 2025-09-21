@@ -19,10 +19,6 @@ MONGO_URI = st.secrets.get("mongodb", {}).get("uri", "")
 DB_NAME = st.secrets.get("mongodb", {}).get("db", "photo_update_db")
 COLLECTION = st.secrets.get("mongodb", {}).get("collection", "history")
 
-# Ahora sí usamos [initial_photo]
-SEED_URL = st.secrets.get("initial_photo", {}).get("url", "")
-SEED_HASH = st.secrets.get("initial_photo", {}).get("hash", "")
-
 client = MongoClient(MONGO_URI) if MONGO_URI else None
 db = client[DB_NAME] if client else None
 
@@ -87,48 +83,40 @@ latest = None
 if db is not None:
     latest = db[COLLECTION].find_one(sort=[("_id", -1)])
 
-    # 🚀 Si no hay fotos en DB, insertar semilla desde secrets
-    if latest is None and SEED_URL:
-        db[COLLECTION].insert_one({
-            "photo_url": SEED_URL,
-            "hash": SEED_HASH or "",
-            "checked_at": datetime.now(colombia)
-        })
-        latest = db[COLLECTION].find_one(sort=[("_id", -1)])
-        st.success("🌱 Foto inicial sembrada en MongoDB.")
-
 if latest:
     st.subheader("🔍 Inspector de estado")
+    checked_at = latest.get("checked_at")
+    if isinstance(checked_at, datetime):
+        checked_at = checked_at.strftime("%Y-%m-%d %H:%M:%S")
+
     st.json({
         "Último Hash": latest.get("hash"),
-        "Última verificación": latest.get("checked_at", "Nunca"),
+        "Última verificación": checked_at or "Nunca",
         "Ubicación": st.session_state.geo_data if st.session_state.geo_data else "No detectado"
     })
 
-    # 🖼️ Debug visual de foto
-    st.write(f"🖼️ URL usada: {latest['photo_url']}")
     try:
         img_bytes = download_image(latest["photo_url"])
         st.image(img_bytes, caption="Miniatura actual")
     except Exception as e:
         st.error(f"❌ No se pudo cargar la imagen: {e}")
 else:
-    st.warning("⚠️ No hay fotos registradas ni en DB ni en secrets.")
+    st.warning("⚠️ No hay fotos registradas en la base de datos.")
 
 # =========================
 # CHECK & UPDATE
 # =========================
 if st.button("🔄 Verificar foto ahora"):
-    if not SEED_URL:
-        st.error("❌ No hay URL de foto configurada en secrets.toml ([initial_photo])")
+    if not latest:
+        st.error("❌ No hay foto inicial en la base de datos. Inserta una manualmente en Mongo.")
     else:
         try:
-            img = download_image(SEED_URL)
+            img = download_image(latest["photo_url"])
             new_hash = calculate_hash(img)
 
-            if not latest or new_hash != latest["hash"]:
+            if new_hash != latest["hash"]:
                 db[COLLECTION].insert_one({
-                    "photo_url": SEED_URL,
+                    "photo_url": latest["photo_url"],
                     "hash": new_hash,
                     "checked_at": datetime.now(colombia)
                 })
