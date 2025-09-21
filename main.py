@@ -1,4 +1,5 @@
 # main.py
+# main.py
 import streamlit as st
 from pymongo import MongoClient
 import hashlib
@@ -35,7 +36,7 @@ def calculate_hash(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 def log_access(lat=None, lon=None):
-    if db:
+    if db is not None:
         db.access_log.insert_one({
             "ts": datetime.now(colombia),
             "lat": lat,
@@ -85,7 +86,7 @@ if not st.session_state.access_logged:
 # DB: LATEST PHOTO
 # =========================
 latest = None
-if db:
+if db is not None:
     latest = db[COLLECTION].find_one(sort=[("_id", -1)])
 
 if latest:
@@ -126,7 +127,7 @@ if st.button("🔄 Verificar foto ahora"):
 # =========================
 # HISTORIAL DE ACCESOS
 # =========================
-if db:
+if db is not None:
     st.subheader("📜 Historial de accesos recientes")
     logs = list(db.access_log.find().sort("ts", -1).limit(10))
     if logs:
