@@ -2,18 +2,17 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
-import json  # 👈 nuevo, para parsear respuesta JS
+import json  # 👈 necesario para parsear la respuesta JS
 
 from checker import get_image_bytes, has_photo_changed
 from db import save_photo, get_last_hash, get_last_photo_url
 from notifier import send_whatsapp
 from logs import log_access, get_access_logs
 
-# 📌 import librería para usar JS en el front
 from streamlit_javascript import st_javascript
 
 st.set_page_config(page_title="Photo Update", layout="centered")
-st.title("📸 Photo Update con ubicación desde navegador")
+st.title("📸 Photo Update")
 
 # =========================
 # Estados iniciales
@@ -39,19 +38,19 @@ if not st.session_state.access_logged:
     (async () => {
       return new Promise((resolve) => {
         if (!navigator.geolocation) {
-          resolve({ "error": "no_support" });
+          resolve("{\\"error\\": \\"no_support\\"}");
           return;
         }
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             resolve(JSON.stringify({
-              "lat": pos.coords.latitude,
-              "lon": pos.coords.longitude,
-              "accuracy": pos.coords.accuracy
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+              accuracy: pos.coords.accuracy
             }));
           },
           (err) => {
-            resolve(JSON.stringify({ "error": err.message || err.code }));
+            resolve(JSON.stringify({ error: err.message || err.code }));
           },
           { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
@@ -59,18 +58,19 @@ if not st.session_state.access_logged:
     })();
     """
 
-    res = st_javascript(js_code, key="geo_js")
+    raw = st_javascript(js_code, key="geo_js")
 
-    if res is None:
+    # 🔎 Debug: mostrar lo que llegó crudo
+    st.write("🔎 Respuesta cruda del navegador:", raw)
+
+    if raw is None:
         st.info("⌛ Esperando respuesta del navegador...")
     else:
-        # 🔎 Parsear si viene como string JSON
-        if isinstance(res, str):
-            try:
-                res = json.loads(res)
-            except Exception:
-                st.error(f"⚠️ Respuesta inesperada (string no JSON): {res}")
-                res = {}
+        try:
+            res = json.loads(raw)
+        except Exception:
+            st.error(f"⚠️ No se pudo parsear la respuesta: {raw}")
+            res = {}
 
         if isinstance(res, dict) and res.get("error"):
             st.warning(f"⚠️ No se obtuvo ubicación desde el navegador: {res.get('error')}")
@@ -84,7 +84,7 @@ if not st.session_state.access_logged:
             log_access(lat=lat, lon=lon)
             st.session_state.access_logged = True
         else:
-            st.error(f"❌ Respuesta inesperada del navegador: {res}")
+            st.error(f"❌ Respuesta inesperada tras parseo: {res}")
 
 # =========================
 # Inspector de estado
