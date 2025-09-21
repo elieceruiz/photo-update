@@ -18,7 +18,6 @@ colombia = pytz.timezone("America/Bogota")
 MONGO_URI = st.secrets.get("mongodb", {}).get("uri", "")
 DB_NAME = st.secrets.get("mongodb", {}).get("db", "photo_update_db")
 COLLECTION = st.secrets.get("mongodb", {}).get("collection", "history")
-SEED_URL = st.secrets.get("seed", {}).get("photo_url", "")
 
 client = MongoClient(MONGO_URI) if MONGO_URI else None
 db = client[DB_NAME] if client else None
@@ -40,7 +39,7 @@ def log_access(lat=None, lon=None, acc=None):
             "ts": datetime.now(colombia),
             "lat": lat,
             "lon": lon,
-            "accuracy": acc
+            "acc": acc
         })
 
 # =========================
@@ -75,7 +74,7 @@ if not st.session_state.access_logged:
 
         elif "error" in geo:
             st.warning(f"⚠️ Error navegador: {geo['error']}")
-            log_access(lat=None, lon=None, acc=None)
+            log_access(lat=None, lon=None)
             st.session_state.access_logged = True
     else:
         st.info("⌛ Esperando respuesta del navegador...")
@@ -84,7 +83,7 @@ if not st.session_state.access_logged:
 # DB: LATEST PHOTO
 # =========================
 latest = None
-if db:
+if db is not None:
     latest = db[COLLECTION].find_one(sort=[("_id", -1)])
 
 if latest:
@@ -94,7 +93,6 @@ if latest:
         "Última verificación": latest.get("checked_at", "Nunca"),
         "Ubicación": st.session_state.geo_data if st.session_state.geo_data else "No detectado"
     })
-
     st.image(latest["photo_url"], caption="Miniatura actual")
 else:
     st.warning("⚠️ No hay fotos registradas todavía en la base de datos.")
@@ -103,16 +101,16 @@ else:
 # CHECK & UPDATE
 # =========================
 if st.button("🔄 Verificar foto ahora"):
-    if not SEED_URL:
-        st.error("❌ No hay URL de foto configurada en secrets.toml ([seed])")
+    if not latest:
+        st.error("❌ No hay foto inicial en la base de datos.")
     else:
         try:
-            img = download_image(SEED_URL)
+            img = download_image(latest["photo_url"])
             new_hash = calculate_hash(img)
 
             if not latest or new_hash != latest["hash"]:
                 db[COLLECTION].insert_one({
-                    "photo_url": SEED_URL,
+                    "photo_url": latest["photo_url"],
                     "hash": new_hash,
                     "checked_at": datetime.now(colombia)
                 })
@@ -127,27 +125,15 @@ if st.button("🔄 Verificar foto ahora"):
 # =========================
 if db is not None:
     st.subheader("📜 Historial de accesos recientes")
-    logs = list(db.access_log.find().sort("ts", -1))  # descendente
-
+    logs = list(db.access_log.find().sort("ts", -1).limit(10))
     if logs:
-        total = len(logs)
-        data = []
-        for idx, log in enumerate(logs):
-            ts = log.get("ts")
-            if isinstance(ts, datetime):
-                ts = ts.astimezone(colombia).strftime("%d %B %Y")  # ej: 20 September 2025
-
-            lat = log.get("lat")
-            lon = log.get("lon")
-            acc = log.get("accuracy")
-
-            data.append({
-                "#": total - idx,  # numeración (1 es el más antiguo)
-                "Fecha": ts,
-                "Lat": f"{lat:.6f}" if lat else None,
-                "Lon": f"{lon:.6f}" if lon else None,
-                "±m": f"{int(acc)}" if acc else None
-            })
-
-        df = pd.DataFrame(data)
-        st.dataframe(df, use_container_width=True)
+        df = pd.DataFrame([{
+            "Fecha": l["ts"].strftime("%d %b %y"),
+            "Lat": l.get("lat"),
+            "Lon": l.get("lon"),
+            "±m": l.get("acc")
+        } for l in logs])
+        # Reordenar para que el más antiguo quede abajo con índice 1
+        df = df.iloc[::-1].reset_index(drop=True)
+        df.index = df.index + 1
+        st.dataframe(df)
