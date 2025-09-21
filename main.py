@@ -1,9 +1,7 @@
-# main.py
 import streamlit as st
 from datetime import datetime
 import pytz
 import pandas as pd
-
 from geolocation import handle_geolocation
 from photo_checker import check_and_update_photo, download_image
 from db import get_latest_record, get_access_logs
@@ -19,9 +17,9 @@ if "geo_data" not in st.session_state or st.session_state.geo_data is None:
 
 st.title("📸 Update")
 
-handle_geolocation(st.session_state)
-
-latest = get_latest_record()
+with st.spinner("Cargando ubicación y datos, por favor espere..."):
+    handle_geolocation(st.session_state)
+    latest = get_latest_record()
 
 if latest:
     st.subheader("🔍 Inspector de estado")
@@ -31,7 +29,6 @@ if latest:
             checked_at = checked_at.replace(tzinfo=pytz.UTC)
         checked_at = checked_at.astimezone(colombia).strftime("%d %b %y %H:%M")
 
-    # Variables para mostrar coordenadas en decimal y GMS
     if st.session_state.geo_data and "lat" in st.session_state.geo_data and "lon" in st.session_state.geo_data:
         lat = st.session_state.geo_data["lat"]
         lon = st.session_state.geo_data["lon"]
@@ -47,12 +44,12 @@ if latest:
         "Última verificación": checked_at or "Nunca",
         "Ubicación": {
             "decimal": {
-                "lat": lat,
-                "lon": lon,
+                "lat": lat if lat is not None else "No detectada",
+                "lon": lon if lon is not None else "No detectada",
             },
             "GMS": {
-                "lat": lat_gms_str,
-                "lon": lon_gms_str,
+                "lat": lat_gms_str if lat_gms_str is not None else "No detectada",
+                "lon": lon_gms_str if lon_gms_str is not None else "No detectada",
             }
         }
     })
