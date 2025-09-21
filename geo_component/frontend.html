@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <script>
+      // Streamlit wrapper
+      const send = (data) => {
+        Streamlit.setComponentValue(JSON.stringify(data));
+      };
+
+      function success(pos) {
+        const data = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        };
+        send(data);
+      }
+
+      function error(err) {
+        const data = { error: err.message || err.code };
+        send(data);
+      }
+
+      // Llamar geolocalización al cargar
+      window.onload = function () {
+        if (!navigator.geolocation) {
+          send({ error: "no_support" });
+        } else {
+          navigator.geolocation.getCurrentPosition(success, error, {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0
+          });
+        }
+      };
+
+      // Necesario para integrar con Streamlit
+      function onRender(event) {
+        const data = event.detail;
+        Streamlit.setFrameHeight(0);
+      }
+      Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
+      Streamlit.setComponentReady();
+    </script>
+  </head>
+  <body></body>
+</html>
