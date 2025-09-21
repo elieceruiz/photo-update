@@ -7,13 +7,14 @@ import pandas as pd
 from geolocation import handle_geolocation
 from photo_checker import check_and_update_photo, download_image
 from db import get_latest_record, get_access_logs
+from geo_utils import decimal_a_gms, formato_gms
 
 st.set_page_config(page_title="📸 Update", layout="centered")
 colombia = pytz.timezone("America/Bogota")
 
 if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
-if "geo_data" not in st.session_state:
+if "geo_data" not in st.session_state or st.session_state.geo_data is None:
     st.session_state.geo_data = None
 
 st.title("📸 Update")
@@ -21,6 +22,7 @@ st.title("📸 Update")
 handle_geolocation(st.session_state)
 
 latest = get_latest_record()
+
 if latest:
     st.subheader("🔍 Inspector de estado")
     checked_at = latest.get("checked_at")
@@ -29,11 +31,35 @@ if latest:
             checked_at = checked_at.replace(tzinfo=pytz.UTC)
         checked_at = checked_at.astimezone(colombia).strftime("%d %b %y %H:%M")
 
+    # Variables para mostrar coordenadas en decimal y GMS
+    if st.session_state.geo_data and "lat" in st.session_state.geo_data and "lon" in st.session_state.geo_data:
+        lat = st.session_state.geo_data["lat"]
+        lon = st.session_state.geo_data["lon"]
+        lat_g, lat_m, lat_s = decimal_a_gms(lat)
+        lon_g, lon_m, lon_s = decimal_a_gms(lon)
+        lat_gms_str = formato_gms(lat_g, lat_m, lat_s)
+        lon_gms_str = formato_gms(lon_g, lon_m, lon_s)
+    else:
+        lat = None
+        lon = None
+        lat_gms_str = None
+        lon_gms_str = None
+
     st.json({
         "Último Hash": latest.get("hash"),
         "Última verificación": checked_at or "Nunca",
-        "Ubicación": st.session_state.geo_data or "No detectado"
+        "Ubicación": {
+            "decimal": {
+                "lat": lat,
+                "lon": lon,
+            },
+            "GMS": {
+                "lat": lat_gms_str,
+                "lon": lon_gms_str,
+            }
+        }
     })
+
     try:
         img_bytes = download_image(latest["photo_url"])
         if img_bytes:
