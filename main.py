@@ -1,3 +1,4 @@
+# main.py
 import streamlit as st
 from pymongo import MongoClient
 import hashlib
@@ -81,7 +82,14 @@ if latest:
     st.subheader("🔍 Inspector de estado")
     checked_at = latest.get("checked_at")
     if isinstance(checked_at, datetime):
-        checked_at = checked_at.strftime("%d %b %y %H:%M")
+        # Asignar zona UTC si datetime es naive
+        import pytz
+        if checked_at.tzinfo is None:
+            checked_at = checked_at.replace(tzinfo=pytz.UTC)
+        
+        # Convertir a hora local Colombia
+        checked_at = checked_at.astimezone(colombia).strftime("%d %b %y %H:%M")
+    
     st.json({
         "Último Hash": latest.get("hash"),
         "Última verificación": checked_at or "Nunca",
