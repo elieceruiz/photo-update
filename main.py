@@ -1,4 +1,5 @@
 # main.py
+# main.py
 import streamlit as st
 from pymongo import MongoClient
 import hashlib
@@ -18,9 +19,7 @@ colombia = pytz.timezone("America/Bogota")
 MONGO_URI = st.secrets.get("mongodb", {}).get("uri", "")
 DB_NAME = st.secrets.get("mongodb", {}).get("db", "photo_update_db")
 COLLECTION = st.secrets.get("mongodb", {}).get("collection", "history")
-
-SEED_URL = st.secrets.get("initial_photo", {}).get("url", "")
-SEED_HASH = st.secrets.get("initial_photo", {}).get("hash", "")
+SEED_URL = st.secrets.get("seed", {}).get("photo_url", "")
 
 client = MongoClient(MONGO_URI) if MONGO_URI else None
 db = client[DB_NAME] if client else None
@@ -41,28 +40,12 @@ def calculate_hash(content: bytes) -> str:
     return h
 
 def log_access(lat=None, lon=None):
-    if db is not None:
-        db["access_log"].insert_one({
+    if db:
+        db.access_log.insert_one({
             "ts": datetime.now(colombia),
             "lat": lat,
             "lon": lon
         })
-
-def ensure_seed():
-    """Si la colección está vacía, insertar la semilla inicial."""
-    if db and db[COLLECTION].count_documents({}) == 0 and SEED_URL:
-        st.warning("⚠️ [DEBUG] Base vacía, insertando semilla inicial...")
-        try:
-            img = download_image(SEED_URL)
-            h = SEED_HASH or calculate_hash(img)
-            db[COLLECTION].insert_one({
-                "photo_url": SEED_URL,
-                "hash": h,
-                "checked_at": datetime.now(colombia)
-            })
-            st.success("🌱 [DEBUG] Semilla insertada en MongoDB.")
-        except Exception as e:
-            st.error(f"❌ [DEBUG] Error insertando semilla: {e}")
 
 # =========================
 # STATE INIT
@@ -106,8 +89,6 @@ if not st.session_state.access_logged:
 # =========================
 # DB: LATEST PHOTO
 # =========================
-ensure_seed()
-
 latest = None
 if db:
     latest = db[COLLECTION].find_one(sort=[("_id", -1)])
@@ -116,11 +97,12 @@ if latest:
     st.subheader("🔍 Inspector de estado")
     st.json({
         "Último Hash": latest.get("hash"),
-        "Última verificación": str(latest.get("checked_at", "Nunca")),
+        "Última verificación": latest.get("checked_at", "Nunca"),
         "Ubicación": st.session_state.geo_data if st.session_state.geo_data else "No detectado"
     })
 
-    st.write(f"🖼️ [DEBUG] URL actual: {latest['photo_url']}")
+    # DEBUG Foto
+    st.write(f"🖼️ [DEBUG] URL usada: {latest['photo_url']}")
     try:
         st.image(latest["photo_url"], caption="Miniatura actual")
     except Exception as e:
@@ -133,7 +115,7 @@ else:
 # =========================
 if st.button("🔄 Verificar foto ahora"):
     if not SEED_URL:
-        st.error("❌ No hay URL de foto configurada en secrets.toml ([initial_photo])")
+        st.error("❌ No hay URL de foto configurada en secrets.toml ([seed])")
     else:
         try:
             img = download_image(SEED_URL)
