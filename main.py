@@ -3,10 +3,10 @@ import streamlit as st
 from pymongo import MongoClient
 import hashlib
 import requests
-import base64
 import pytz
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
+import pandas as pd
 
 # =========================
 # CONFIG
@@ -15,12 +15,13 @@ st.set_page_config(page_title="Photo Update", layout="centered")
 
 colombia = pytz.timezone("America/Bogota")
 
-MONGO_URI = st.secrets["mongo"]["uri"]
-DB_NAME = st.secrets["mongo"]["db"]
-SEED_URL = st.secrets["seed"]["photo_url"]
+MONGO_URI = st.secrets.get("mongodb", {}).get("uri", "")
+DB_NAME = st.secrets.get("mongodb", {}).get("db", "photo_update_db")
+COLLECTION = st.secrets.get("mongodb", {}).get("collection", "history")
+SEED_URL = st.secrets.get("seed", {}).get("photo_url", "")
 
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
+client = MongoClient(MONGO_URI) if MONGO_URI else None
+db = client[DB_NAME] if client else None
 
 # =========================
 # HELPERS
@@ -34,11 +35,12 @@ def calculate_hash(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 def log_access(lat=None, lon=None):
-    db.access_log.insert_one({
-        "ts": datetime.now(colombia),
-        "lat": lat,
-        "lon": lon
-    })
+    if db:
+        db.access_log.insert_one({
+            "ts": datetime.now(colombia),
+            "lat": lat,
+            "lon": lon
+        })
 
 # =========================
 # STATE INIT
@@ -54,7 +56,7 @@ if "geo_data" not in st.session_state:
 st.title("📸 Photo Update")
 
 # =========================
-# GEOLOCATION (JS + Browser)
+# GEOLOCATION
 # =========================
 if not st.session_state.access_logged:
     st.info("🌍 Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
@@ -82,7 +84,9 @@ if not st.session_state.access_logged:
 # =========================
 # DB: LATEST PHOTO
 # =========================
-latest = db.photos.find_one(sort=[("_id", -1)])
+latest = None
+if db:
+    latest = db[COLLECTION].find_one(sort=[("_id", -1)])
 
 if latest:
     st.subheader("🔍 Inspector de estado")
@@ -100,19 +104,35 @@ else:
 # CHECK & UPDATE
 # =========================
 if st.button("🔄 Verificar foto ahora"):
-    try:
-        img = download_image(SEED_URL)
-        new_hash = calculate_hash(img)
+    if not SEED_URL:
+        st.error("❌ No hay URL de foto configurada en secrets.toml ([seed])")
+    else:
+        try:
+            img = download_image(SEED_URL)
+            new_hash = calculate_hash(img)
 
-        if not latest or new_hash != latest["hash"]:
-            db.photos.insert_one({
-                "photo_url": SEED_URL,
-                "hash": new_hash,
-                "checked_at": datetime.now(colombia)
-            })
-            st.success("✅ Nueva foto detectada y guardada en MongoDB.")
-        else:
-            st.info("ℹ️ No hubo cambios en la foto.")
+            if not latest or new_hash != latest["hash"]:
+                db[COLLECTION].insert_one({
+                    "photo_url": SEED_URL,
+                    "hash": new_hash,
+                    "checked_at": datetime.now(colombia)
+                })
+                st.success("✅ Nueva foto detectada y guardada en MongoDB.")
+            else:
+                st.info("ℹ️ No hubo cambios en la foto.")
+        except Exception as e:
+            st.error(f"❌ Error al verificar foto: {e}")
 
-    except Exception as e:
-        st.error(f"❌ Error al verificar foto: {e}")
+# =========================
+# HISTORIAL DE ACCESOS
+# =========================
+if db:
+    st.subheader("📜 Historial de accesos recientes")
+    logs = list(db.access_log.find().sort("ts", -1).limit(10))
+    if logs:
+        df = pd.DataFrame([{
+            "Fecha": l["ts"].strftime("%Y-%m-%d %H:%M:%S"),
+            "Lat": l.get("lat"),
+            "Lon": l.get("lon")
+        } for l in logs])
+        st.dataframe(df)
