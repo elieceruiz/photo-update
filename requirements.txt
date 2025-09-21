@@ -4,5 +4,4 @@ pymongo
 requests
 beautifulsoup4
 twilio
-streamlit-geolocation
-streamlit-javascript
+pandas
