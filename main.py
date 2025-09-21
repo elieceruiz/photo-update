@@ -2,7 +2,7 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
-import json  # 👈 necesario para parsear la respuesta JS
+import json  # 👈 necesario para parsear respuesta de JS
 
 from checker import get_image_bytes, has_photo_changed
 from db import save_photo, get_last_hash, get_last_photo_url
@@ -12,7 +12,7 @@ from logs import log_access, get_access_logs
 from streamlit_javascript import st_javascript
 
 st.set_page_config(page_title="Photo Update", layout="centered")
-st.title("📸 Photo Update")
+st.title("📸 Photo Update con ubicación desde navegador")
 
 # =========================
 # Estados iniciales
@@ -43,14 +43,16 @@ if not st.session_state.access_logged:
         }
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            resolve(JSON.stringify({
+            const result = {
               lat: pos.coords.latitude,
               lon: pos.coords.longitude,
               accuracy: pos.coords.accuracy
-            }));
+            };
+            resolve(JSON.stringify(result)); // 🔥 forzar string JSON
           },
           (err) => {
-            resolve(JSON.stringify({ error: err.message || err.code }));
+            const result = { error: err.message || err.code };
+            resolve(JSON.stringify(result)); // 🔥 forzar string JSON
           },
           { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
@@ -60,23 +62,23 @@ if not st.session_state.access_logged:
 
     raw = st_javascript(js_code, key="geo_js")
 
-    # 🔎 Debug: mostrar lo que llegó crudo
-    st.write("🔎 Respuesta cruda del navegador:", raw)
+    # 🔎 Debug extendido
+    st.write("🔎 Respuesta cruda del navegador:", raw, "| Tipo:", type(raw))
 
     if raw is None:
         st.info("⌛ Esperando respuesta del navegador...")
-    else:
+    elif isinstance(raw, str):
         try:
             res = json.loads(raw)
         except Exception:
             st.error(f"⚠️ No se pudo parsear la respuesta: {raw}")
             res = {}
 
-        if isinstance(res, dict) and res.get("error"):
-            st.warning(f"⚠️ No se obtuvo ubicación desde el navegador: {res.get('error')}")
+        if res.get("error"):
+            st.warning(f"⚠️ No se obtuvo ubicación desde el navegador: {res['error']}")
             log_access(lat=None, lon=None)
             st.session_state.access_logged = True
-        elif isinstance(res, dict) and "lat" in res and "lon" in res:
+        elif "lat" in res and "lon" in res:
             lat = float(res["lat"])
             lon = float(res["lon"])
             acc = res.get("accuracy")
@@ -85,6 +87,8 @@ if not st.session_state.access_logged:
             st.session_state.access_logged = True
         else:
             st.error(f"❌ Respuesta inesperada tras parseo: {res}")
+    else:
+        st.error(f"❌ Tipo inesperado recibido: {type(raw)} valor={raw}")
 
 # =========================
 # Inspector de estado
