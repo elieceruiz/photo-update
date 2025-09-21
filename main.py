@@ -1,5 +1,4 @@
 # main.py
-# main.py
 import streamlit as st
 from pymongo import MongoClient
 import hashlib
@@ -19,7 +18,10 @@ colombia = pytz.timezone("America/Bogota")
 MONGO_URI = st.secrets.get("mongodb", {}).get("uri", "")
 DB_NAME = st.secrets.get("mongodb", {}).get("db", "photo_update_db")
 COLLECTION = st.secrets.get("mongodb", {}).get("collection", "history")
-SEED_URL = st.secrets.get("seed", {}).get("photo_url", "")
+
+# Ahora sí usamos [initial_photo]
+SEED_URL = st.secrets.get("initial_photo", {}).get("url", "")
+SEED_HASH = st.secrets.get("initial_photo", {}).get("hash", "")
 
 client = MongoClient(MONGO_URI) if MONGO_URI else None
 db = client[DB_NAME] if client else None
@@ -60,8 +62,6 @@ st.title("📸 Photo Update")
 # GEOLOCATION
 # =========================
 if not st.session_state.access_logged:
-    st.info("🌍 Intentando obtener ubicación desde tu navegador (se pedirá permiso)...")
-
     geo = get_geolocation()
 
     if geo:
@@ -79,8 +79,6 @@ if not st.session_state.access_logged:
             st.warning(f"⚠️ Error navegador: {geo['error']}")
             log_access(lat=None, lon=None)
             st.session_state.access_logged = True
-    else:
-        st.info("⌛ Esperando respuesta del navegador...")
 
 # =========================
 # DB: LATEST PHOTO
@@ -106,7 +104,7 @@ else:
 # =========================
 if st.button("🔄 Verificar foto ahora"):
     if not SEED_URL:
-        st.error("❌ No hay URL de foto configurada en secrets.toml ([seed])")
+        st.error("❌ No hay URL de foto configurada en secrets.toml ([initial_photo])")
     else:
         try:
             img = download_image(SEED_URL)
