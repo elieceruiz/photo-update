@@ -35,10 +35,7 @@ if latest:
     if st.session_state.geo_data and "lat" in st.session_state.geo_data and "lon" in st.session_state.geo_data:
         lat = st.session_state.geo_data["lat"]
         lon = st.session_state.geo_data["lon"]
-        lat_g, lat_m, lat_s = decimal_a_gms(lat)
-        lon_g, lon_m, lon_s = decimal_a_gms(lon)
-        lat_gms_str = formato_gms(lat_g, lat_m, lat_s)
-        lon_gms_str = formato_gms(lon_g, lon_m, lon_s)
+        lat_gms_str, lon_gms_str = formato_gms_con_hemisferio(lat, lon)
     else:
         lat = None
         lon = None
