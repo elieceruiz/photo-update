@@ -50,9 +50,10 @@ def insert_photo_record(photo_url, hash_value):
             "checked_at": datetime.now(colombia)
         })
 
-def get_access_logs(limit=100):
+def get_access_logs():
     db = get_db()
     if db is not None:
-        cursor = db.access_log.find().sort("ts", 1).limit(limit)
+        cursor = db.access_log.find().sort("ts", 1)
         return list(cursor)
     return []
+
