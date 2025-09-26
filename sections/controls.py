@@ -1,32 +1,51 @@
 # sections/controls.py
 import streamlit as st
-from url_handler import show_url_input, process_new_url
-from photo_checker import download_image
+from datetime import datetime
+import pytz
+from db import insert_photo_record
+from sections.inspector import show_debug, compare_urls
 
-def render_controls(latest, geo_data, check_and_update_photo):
+def handle_url_input(latest, geo_data):
+    """
+    Maneja tanto el primer registro como actualizaciones de URL de foto.
+    Retorna True si se guardó un nuevo registro.
+    """
+    url_mongo = latest.get("photo_url", "") if latest else ""
+    nuevo_url = None
+
     # Input condicional
-    url_mongo, nuevo_url = show_url_input(latest, geo_data)
-    process_new_url(url_mongo, nuevo_url, geo_data)
+    if not url_mongo:
+        nuevo_url = st.text_input("✏️ Registrar primer URL de foto")
+    elif st.session_state.show_input:
+        nuevo_url = st.text_input("✏️ Ingresa nuevo enlace para comparar y registrar")
 
-    # Imagen actual
-    if url_mongo:
-        try:
-            img_bytes = download_image(url_mongo)
-            if img_bytes:
-                st.image(img_bytes, caption="Miniatura actual")
-            else:
-                st.error("❌ No se pudo cargar la imagen")
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
-    else:
-        st.warning("⚠️ No hay URL de foto en el último registro")
-
-    # Botón de verificación
-    if st.button("🔄 Verificar foto ahora"):
-        changed, msg = check_and_update_photo()
-        if changed:
-            st.success(msg)
-            st.session_state.show_input = True
-        else:
-            st.info(msg)
+    if nuevo_url:
+        # Caso: link igual → nada que actualizar
+        if url_mongo and url_mongo == nuevo_url:
+            st.success("✅ El link en Mongo es IGUAL al nuevo. No se requiere actualización.")
             st.session_state.show_input = False
+            return False
+
+        # Caso: link distinto o primer registro → comparar y mostrar debug
+        if url_mongo:
+            compare_urls(url_mongo, nuevo_url)
+
+        hash_value = show_debug(nuevo_url, geo_data)
+
+        try:
+            insert_photo_record(
+                photo_url=nuevo_url,
+                hash_value=hash_value,
+                checked_at=datetime.utcnow().replace(tzinfo=pytz.UTC),
+                geo_data=geo_data
+            )
+            if url_mongo:
+                st.success("✅ Nuevo enlace guardado en Mongo")
+            else:
+                st.success("✅ Primer enlace guardado en Mongo")
+            st.session_state.show_input = False
+            return True
+        except Exception as e:
+            st.error(f"💥 Error en insert_photo_record: {e}")
+            return False
+    return False
