@@ -80,21 +80,17 @@ if latest:
     })
 
     # ==============================
-    # Comparación de URLs
+    # Input para nuevo URL
     # ==============================
     url_mongo = latest.get("photo_url", "")
-
-    st.subheader("🧾 Comparación de URLs")
-    st.write("🔗 URL en Mongo:")
-    st.code(url_mongo if url_mongo else "❌ No registrada", language="text")
-
-    # Input para nuevo URL
     nuevo_url = st.text_input("✏️ Ingresa nuevo enlace para comparar y registrar")
 
     if nuevo_url:
         if url_mongo == nuevo_url:
             st.success("✅ El link en Mongo es IGUAL al nuevo")
         else:
+            # Solo mostramos comparación si son diferentes
+            st.subheader("🧾 Comparación de URLs")
             st.error("❌ El link en Mongo es DIFERENTE al nuevo")
 
             # Comparación de parámetros de query
