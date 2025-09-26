@@ -21,7 +21,7 @@ from geo_utils import formato_gms_con_hemisferio
 st.set_page_config(page_title="📸 Update", layout="centered")
 colombia = pytz.timezone("America/Bogota")
 
-# Estado de sesión
+# Variables en sesión para estado
 if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
 if "geo_data" not in st.session_state or st.session_state.geo_data is None:
@@ -38,18 +38,19 @@ st.title("📸 Update")
 with st.spinner("Cargando ubicación y datos, por favor espere..."):
     # Captura geolocalización → se guarda en st.session_state.geo_data
     handle_geolocation(st.session_state)
+    # Cargar último registro de foto desde Mongo
     latest = get_latest_record()
 
 # ==============================
-# Si hay registro previo
+# Si hay registro previo en Mongo
 # ==============================
 if latest:
     st.subheader("🔍 Inspector de estado")
 
-    # Última fecha de verificación → mostrar en Bogotá
+    # Fecha de verificación → formateada en hora local Bogotá
     checked_at = latest.get("checked_at")
     if isinstance(checked_at, datetime):
-        if checked_at.tzinfo is None:
+        if checked_at.tzinfo is None:  # naive → asumimos UTC
             checked_at = checked_at.replace(tzinfo=pytz.UTC)
         checked_at_str = checked_at.astimezone(colombia).strftime("%d %b %y %H:%M")
     else:
@@ -64,7 +65,7 @@ if latest:
         lat = lon = None
         lat_gms_str = lon_gms_str = None
 
-    # Inspector de estado
+    # Inspector de estado (últimos valores)
     st.json({
         "Último Hash": latest.get("hash"),
         "Última verificación": checked_at_str,
@@ -89,7 +90,7 @@ if latest:
     st.write("🔗 URL en Mongo:")
     st.code(url_mongo, language="text")
 
-    # Campo input para nuevo URL
+    # Input para nuevo URL
     nuevo_url = st.text_input("✏️ Ingresa nuevo enlace para comparar y registrar")
 
     if nuevo_url:
@@ -128,13 +129,13 @@ if latest:
                 "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
             })
 
-            # Guardar nuevo registro en Mongo
+            # Guardar nuevo registro en Mongo (uso de kwargs explícitos)
             try:
                 insert_photo_record(
-                    nuevo_url,
-                    hash_value,
-                    datetime.utcnow(),      # siempre UTC
-                    st.session_state.geo_data
+                    photo_url=nuevo_url,
+                    hash_value=hash_value,
+                    checked_at=datetime.utcnow().replace(tzinfo=pytz.UTC),
+                    geo_data=st.session_state.geo_data
                 )
                 st.success("✅ Nuevo enlace guardado en Mongo con hash, fecha (UTC) y ubicación")
             except Exception as e:
@@ -170,12 +171,13 @@ else:
             "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
         })
 
+        # Guardar primer registro en Mongo (kwargs explícitos)
         try:
             insert_photo_record(
-                nuevo_url,
-                hash_value,
-                datetime.utcnow(),      # UTC
-                st.session_state.geo_data
+                photo_url=nuevo_url,
+                hash_value=hash_value,
+                checked_at=datetime.utcnow().replace(tzinfo=pytz.UTC),
+                geo_data=st.session_state.geo_data
             )
             st.success("✅ Primer enlace guardado en Mongo con hash, fecha (UTC) y ubicación")
         except Exception as e:
