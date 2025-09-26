@@ -36,9 +36,7 @@ st.title("📸 Update")
 # Cargar datos iniciales
 # ==============================
 with st.spinner("Cargando ubicación y datos, por favor espere..."):
-    # Captura geolocalización → se guarda en st.session_state.geo_data
     handle_geolocation(st.session_state)
-    # Cargar último registro de foto desde Mongo
     latest = get_latest_record()
 
 # ==============================
@@ -54,7 +52,7 @@ if latest:
             checked_at = checked_at.replace(tzinfo=pytz.UTC)
         checked_at_str = checked_at.astimezone(colombia).strftime("%d %b %y %H:%M")
     else:
-        checked_at_str = "Nunca"
+        checked_at_str = "❌ No disponible"
 
     # GeoData actual de sesión
     if st.session_state.geo_data and "lat" in st.session_state.geo_data and "lon" in st.session_state.geo_data:
@@ -67,7 +65,7 @@ if latest:
 
     # Inspector de estado (últimos valores)
     st.json({
-        "Último Hash": latest.get("hash"),
+        "Último Hash": latest.get("hash") or latest.get("hash_value", "❌ No disponible"),
         "Última verificación": checked_at_str,
         "Ubicación actual": {
             "decimal": {
@@ -88,7 +86,7 @@ if latest:
 
     st.subheader("🧾 Comparación de URLs")
     st.write("🔗 URL en Mongo:")
-    st.code(url_mongo, language="text")
+    st.code(url_mongo if url_mongo else "❌ No registrada", language="text")
 
     # Input para nuevo URL
     nuevo_url = st.text_input("✏️ Ingresa nuevo enlace para comparar y registrar")
@@ -100,7 +98,7 @@ if latest:
             st.error("❌ El link en Mongo es DIFERENTE al nuevo")
 
             # Comparación de parámetros de query
-            mongo_params = parse_qs(urlparse(url_mongo).query)
+            mongo_params = parse_qs(urlparse(url_mongo).query) if url_mongo else {}
             nuevo_params = parse_qs(urlparse(nuevo_url).query)
             todas_claves = set(mongo_params.keys()) | set(nuevo_params.keys())
 
@@ -129,7 +127,7 @@ if latest:
                 "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
             })
 
-            # Guardar nuevo registro en Mongo (uso de kwargs explícitos)
+            # Guardar nuevo registro en Mongo
             try:
                 insert_photo_record(
                     photo_url=nuevo_url,
@@ -145,11 +143,14 @@ if latest:
     # Mostrar imagen actual
     # ==============================
     try:
-        img_bytes = download_image(url_mongo)
-        if img_bytes:
-            st.image(img_bytes, caption="Miniatura actual")
+        if url_mongo:
+            img_bytes = download_image(url_mongo)
+            if img_bytes:
+                st.image(img_bytes, caption="Miniatura actual")
+            else:
+                st.error("❌ No se pudo cargar la imagen")
         else:
-            st.error("❌ No se pudo cargar la imagen")
+            st.warning("⚠️ No hay URL de foto en el último registro")
     except Exception as e:
         st.error(f"❌ Error: {e}")
 
@@ -171,7 +172,7 @@ else:
             "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
         })
 
-        # Guardar primer registro en Mongo (kwargs explícitos)
+        # Guardar primer registro en Mongo
         try:
             insert_photo_record(
                 photo_url=nuevo_url,
@@ -209,6 +210,6 @@ if logs:
         })
     df = pd.DataFrame(data)
     df.index = range(1, len(df) + 1)
-    df = df.iloc[::-1]  # invertir para ver lo más reciente arriba
+    df = df.iloc[::-1]
     st.subheader("📜 Historial de accesos")
     st.dataframe(df, use_container_width=True)
