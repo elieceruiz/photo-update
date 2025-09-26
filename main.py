@@ -1,198 +1,205 @@
-# =========================
 # main.py
-# =========================
-# App en Streamlit para registrar actualizaciones de fotos, verificar hashes,
-# guardar URLs y ubicaciones en MongoDB, y mostrar un inspector de estado.
-# =========================
-
+# ==============================
+# Importaciones
+# ==============================
 import streamlit as st
-from pymongo import MongoClient
-import hashlib
-import requests
-import pytz
 from datetime import datetime
-from streamlit_js_eval import get_geolocation
+import pytz
 import pandas as pd
-import json
+import hashlib  # 👈 para generar hash
+from urllib.parse import urlparse, parse_qs
 
-# =========================
-# CONFIGURACIÓN INICIAL
-# =========================
-st.set_page_config(page_title="Photo Update", layout="centered")
+# Módulos locales
+from geolocation import handle_geolocation
+from photo_checker import check_and_update_photo, download_image
+from db import get_latest_record, get_access_logs, insert_photo_record
+from geo_utils import formato_gms_con_hemisferio
+
+# ==============================
+# Configuración inicial
+# ==============================
+st.set_page_config(page_title="📸 Update", layout="centered")
 colombia = pytz.timezone("America/Bogota")
 
-# =========================
-# CONEXIÓN A MONGO
-# =========================
-# Nota: Ajusta con tu string de conexión real.
-client = MongoClient("mongodb://localhost:27017/")
-db = client["photo_update_db"]
-collection = db["photos"]
+if "access_logged" not in st.session_state:
+    st.session_state.access_logged = False
+if "geo_data" not in st.session_state or st.session_state.geo_data is None:
+    st.session_state.geo_data = None
 
-# =========================
-# FUNCIONES AUXILIARES
-# =========================
-
-def calcular_hash(url):
-    """
-    Calcula el hash SHA256 de la imagen descargada desde la URL.
-    Devuelve el hash en hexadecimal.
-    """
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        return hashlib.sha256(response.content).hexdigest()
-    except Exception as e:
-        st.error(f"⚠️ Error calculando hash: {e}")
-        return None
-
-
-def insert_photo_record(url, hash_value, ultima_verificacion=None, geo_data=None):
-    """
-    Inserta un nuevo registro en MongoDB con:
-    - URL de la imagen
-    - Hash calculado
-    - Última verificación (timestamp string)
-    - Ubicación (geo_data en dict)
-    - Fecha de inserción
-    """
-    try:
-        record = {
-            "url": url,
-            "hash": hash_value,
-            "ultima_verificacion": ultima_verificacion,
-            "ubicacion": geo_data,
-            "fecha": datetime.now(colombia).strftime("%d %b %y %H:%M")
-        }
-        collection.insert_one(record)
-        return True
-    except Exception as e:
-        st.error(f"💥 Error en insert_photo_record: {e}")
-        return False
-
-
-def obtener_ultimo_registro():
-    """
-    Obtiene el último registro insertado en MongoDB.
-    Si no hay, devuelve None.
-    """
-    return collection.find_one(sort=[("_id", -1)])
-
-
-def comparar_urls(url_db, url_nueva):
-    """
-    Compara 2 URLs analizando sus parámetros GET.
-    Devuelve un dict con las diferencias encontradas.
-    """
-    from urllib.parse import urlparse, parse_qs
-
-    parsed_db = urlparse(url_db)
-    parsed_new = urlparse(url_nueva)
-
-    params_db = parse_qs(parsed_db.query)
-    params_new = parse_qs(parsed_new.query)
-
-    diferencias = {}
-    for key in set(params_db.keys()).union(params_new.keys()):
-        val_db = params_db.get(key, ["—"])[0]
-        val_new = params_new.get(key, ["—"])[0]
-        if val_db != val_new:
-            diferencias[key] = {"Mongo": val_db, "Nuevo": val_new}
-
-    return diferencias
-
-
-def formato_gms(lat, lon):
-    """
-    Convierte coordenadas decimales en formato Grados, Minutos, Segundos (GMS).
-    """
-    def to_gms(value, is_lat=True):
-        grados = int(abs(value))
-        minutos = int((abs(value) - grados) * 60)
-        segundos = round(((abs(value) - grados) * 60 - minutos) * 60, 2)
-        cardinal = (
-            "N" if is_lat and value >= 0 else
-            "S" if is_lat else
-            "E" if value >= 0 else "W"
-        )
-        return f"{grados}° {minutos}' {segundos}\" {cardinal}"
-
-    return {
-        "lat": to_gms(lat, is_lat=True),
-        "lon": to_gms(lon, is_lat=False)
-    }
-
-# =========================
-# FRONT: INTERFAZ STREAMLIT
-# =========================
-
+# ==============================
+# Título
+# ==============================
 st.title("📸 Update")
-st.subheader("🔍 Inspector de estado")
 
-# --- Obtener último registro de Mongo
-ultimo = obtener_ultimo_registro()
+# ==============================
+# Cargar datos iniciales
+# ==============================
+with st.spinner("Cargando ubicación y datos, por favor espere..."):
+    handle_geolocation(st.session_state)
+    latest = get_latest_record()
 
-if ultimo:
-    # Mostrar último hash y verificación
+# ==============================
+# Si hay registro
+# ==============================
+if latest:
+    st.subheader("🔍 Inspector de estado")
+
+    checked_at = latest.get("checked_at")
+    if isinstance(checked_at, datetime):
+        if checked_at.tzinfo is None:
+            checked_at = checked_at.replace(tzinfo=pytz.UTC)
+        checked_at = checked_at.astimezone(colombia).strftime("%d %b %y %H:%M")
+
+    if st.session_state.geo_data and "lat" in st.session_state.geo_data and "lon" in st.session_state.geo_data:
+        lat = st.session_state.geo_data["lat"]
+        lon = st.session_state.geo_data["lon"]
+        lat_gms_str, lon_gms_str = formato_gms_con_hemisferio(lat, lon)
+    else:
+        lat = lon = None
+        lat_gms_str = lon_gms_str = None
+
     st.json({
-        "Último Hash": ultimo.get("hash"),
-        "Última verificación": ultimo.get("ultima_verificacion"),
+        "Último Hash": latest.get("hash"),
+        "Última verificación": checked_at or "Nunca",
         "Ubicación": {
-            "decimal": ultimo.get("ubicacion"),
-            "GMS": (
-                formato_gms(
-                    ultimo["ubicacion"]["lat"],
-                    ultimo["ubicacion"]["lon"]
-                )
-                if ultimo.get("ubicacion") else None
-            )
+            "decimal": {
+                "lat": lat if lat is not None else "No detectada",
+                "lon": lon if lon is not None else "No detectada",
+            },
+            "GMS": {
+                "lat": lat_gms_str if lat_gms_str is not None else "No detectada",
+                "lon": lon_gms_str if lon_gms_str is not None else "No detectada",
+            }
         }
     })
-else:
-    st.info("ℹ️ No hay registros previos en MongoDB.")
 
-st.divider()
+    # ==============================
+    # Comparación de URLs
+    # ==============================
+    url_mongo = latest.get("photo_url", "")
 
-# --- Input de nueva URL
-nuevo_url = st.text_input("✏️ Ingresa nuevo enlace para comparar y registrar")
+    st.subheader("🧾 Comparación de URLs")
+    st.write("🔗 URL en Mongo:")
+    st.code(url_mongo, language="text")
 
-if nuevo_url:
-    if ultimo:
-        st.write("🔗 URL en Mongo:")
-        st.code(ultimo["url"])
+    # Campo para ingresar nuevo link
+    nuevo_url = st.text_input("✏️ Ingresa nuevo enlace para comparar y registrar")
 
-        st.write("🔗 Nueva URL ingresada:")
-        st.code(nuevo_url)
-
-        # Comparar parámetros
-        diferencias = comparar_urls(ultimo["url"], nuevo_url)
-
-        if diferencias:
-            st.error("❌ El link en Mongo es DIFERENTE al nuevo")
-            st.write("🔍 Diferencias encontradas por parámetro:")
-            st.json(diferencias)
+    if nuevo_url:
+        if url_mongo == nuevo_url:
+            st.success("✅ El link en Mongo es IGUAL al nuevo")
         else:
-            st.success("✅ Los enlaces son iguales (parámetros coinciden).")
+            st.error("❌ El link en Mongo es DIFERENTE al nuevo")
 
-    # --- Botón para registrar nuevo
-    if st.button("Registrar nuevo enlace"):
-        nuevo_hash = calcular_hash(nuevo_url)
-        if nuevo_hash:
-            # Capturar ubicación del navegador
-            geo_data = get_geolocation()
-            if geo_data:
-                st.session_state.geo_data = geo_data
-            else:
-                st.session_state.geo_data = None
+            # Comparación detallada
+            mongo_params = parse_qs(urlparse(url_mongo).query)
+            nuevo_params = parse_qs(urlparse(nuevo_url).query)
+            todas_claves = set(mongo_params.keys()) | set(nuevo_params.keys())
 
-            exito = insert_photo_record(
+            st.markdown("🔍 **Diferencias encontradas por parámetro:**")
+            diferencias = False
+            for clave in todas_claves:
+                val_mongo = mongo_params.get(clave, ["-"])[0]
+                val_nuevo = nuevo_params.get(clave, ["-"])[0]
+                if val_mongo != val_nuevo:
+                    diferencias = True
+                    st.markdown(f"- {clave} = {val_mongo}  (Mongo)")
+                    st.markdown(f"+ {clave} = {val_nuevo}  (Nuevo)")
+
+            if not diferencias:
+                st.info("ℹ️ No se encontraron diferencias en los parámetros. Puede que cambie solo la parte base del link.")
+
+            # ==============================
+            # Inspector DEBUG antes de guardar
+            # ==============================
+            st.subheader("🛠️ Inspector DEBUG")
+            hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
+            st.json({
+                "Nuevo URL": nuevo_url,
+                "Hash generado": hash_value,
+                "Fecha UTC": datetime.utcnow().strftime("%d %b %y %H:%M"),
+                "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
+            })
+
+            # Guardar nuevo registro en Mongo
+            try:
+                insert_photo_record(
+                    nuevo_url,
+                    hash_value,
+                    datetime.utcnow(),
+                    st.session_state.geo_data
+                )
+                st.success("✅ Nuevo enlace guardado en Mongo con hash, fecha y ubicación")
+            except Exception as e:
+                st.error(f"💥 Error en insert_photo_record: {e}")
+
+    # ==============================
+    # Mostrar imagen
+    # ==============================
+    try:
+        img_bytes = download_image(url_mongo)
+        if img_bytes:
+            st.image(img_bytes, caption="Miniatura actual")
+        else:
+            st.error("❌ No se pudo cargar la imagen")
+    except Exception as e:
+        st.error(f"❌ Error: {e}")
+
+# ==============================
+# Si NO hay registros
+# ==============================
+else:
+    st.warning("⚠️ No hay fotos registradas en la base de datos.")
+    nuevo_url = st.text_input("✏️ Registrar primer URL de foto")
+    if nuevo_url:
+        hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
+
+        # Inspector DEBUG inicial
+        st.subheader("🛠️ Inspector DEBUG")
+        st.json({
+            "Primer URL": nuevo_url,
+            "Hash generado": hash_value,
+            "Fecha UTC": datetime.utcnow().strftime("%d %b %y %H:%M"),
+            "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
+        })
+
+        try:
+            insert_photo_record(
                 nuevo_url,
-                nuevo_hash,
-                datetime.now(colombia).strftime("%d %b %y %H:%M"),
+                hash_value,
+                datetime.utcnow(),
                 st.session_state.geo_data
             )
+            st.success("✅ Primer enlace guardado en Mongo con hash, fecha y ubicación")
+        except Exception as e:
+            st.error(f"💥 Error en insert_photo_record: {e}")
 
-            if exito:
-                st.success("✅ Nuevo enlace registrado en MongoDB.")
-            else:
-                st.error("❌ No se pudo guardar en Mongo.")
+# ==============================
+# Botón verificación manual
+# ==============================
+if st.button("🔄 Verificar foto ahora"):
+    changed, msg = check_and_update_photo()
+    if changed:
+        st.success(msg)
+    else:
+        st.info(msg)
+
+# ==============================
+# Historial accesos
+# ==============================
+logs = get_access_logs()
+if logs:
+    data = []
+    for l in logs:
+        ts = l["ts"].astimezone(colombia).strftime("%d %b %y %H:%M")
+        data.append({
+            "Fecha": ts,
+            "Lat": f"{l.get('lat'):.6f}" if l.get("lat") else None,
+            "Lon": f"{l.get('lon'):.6f}" if l.get("lon") else None,
+            "±m": f"{int(l.get('acc'))}" if l.get("acc") else None,
+        })
+    df = pd.DataFrame(data)
+    df.index = range(1, len(df) + 1)
+    df = df.iloc[::-1]
+    st.subheader("📜 Historial de accesos")
+    st.dataframe(df, use_container_width=True)
