@@ -1,15 +1,20 @@
+# main.py
+# ==============================
+# Importaciones
+# ==============================
 import streamlit as st
 from geolocation import handle_geolocation
-from photo_checker import check_and_update_photo, download_image
 from db import get_latest_record, get_access_logs
 
+# Secciones modulares
 from sections.inspector import show_latest_record
 from sections.controls import handle_url_input
 from sections.history import show_access_logs
+from sections.display import show_image, manual_verification
 
-# ---------------------------
+# ==============================
 # Configuración de la app
-# ---------------------------
+# ==============================
 st.set_page_config(page_title="📸 Update", layout="centered")
 
 # Inicializar session_state
@@ -22,53 +27,37 @@ if "access_logged" not in st.session_state:
 
 st.title("📸 Update")
 
-# ---------------------------
+# ==============================
 # Cargar ubicación y último registro
-# ---------------------------
+# ==============================
 with st.spinner("Cargando ubicación y datos, por favor espere..."):
     handle_geolocation(st.session_state)
     latest = get_latest_record()
 
-# ---------------------------
+# ==============================
 # Mostrar inspector del último registro
-# ---------------------------
+# ==============================
 if latest:
     show_latest_record(latest, st.session_state.geo_data)
 
-# ---------------------------
+# ==============================
 # Manejar input de URL (primer registro o actualización)
-# ---------------------------
+# ==============================
 nuevo_guardado = handle_url_input(latest, st.session_state.geo_data)
 
-# ---------------------------
+# ==============================
 # Mostrar imagen actual
-# ---------------------------
+# ==============================
 url_mongo = latest.get("photo_url") if latest else None
-try:
-    if url_mongo:
-        img_bytes = download_image(url_mongo)
-        if img_bytes:
-            st.image(img_bytes, caption="Miniatura actual")
-        else:
-            st.error("❌ No se pudo cargar la imagen")
-    elif not latest and not nuevo_guardado:
-        st.warning("⚠️ No hay fotos registradas en la base de datos.")
-except Exception as e:
-    st.error(f"❌ Error: {e}")
+show_image(url_mongo, nuevo_guardado)
 
-# ---------------------------
-# Verificación manual de foto
-# ---------------------------
-if st.button("🔄 Verificar foto ahora"):
-    changed, msg = check_and_update_photo()
-    st.session_state.show_input = changed
-    if changed:
-        st.success(msg)
-    else:
-        st.info(msg)
+# ==============================
+# Verificación manual
+# ==============================
+manual_verification()
 
-# ---------------------------
+# ==============================
 # Mostrar historial de accesos
-# ---------------------------
+# ==============================
 logs = get_access_logs()
 show_access_logs(logs)
