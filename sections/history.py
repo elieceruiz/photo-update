@@ -1,9 +1,14 @@
-# sections/history.py
 import streamlit as st
 import pandas as pd
 import pytz
 
 def show_access_logs(logs):
+    """
+    Muestra en un dataframe el historial de accesos con:
+    - Fecha
+    - Latitud/Longitud
+    - Precisión ±m
+    """
     if logs:
         colombia = pytz.timezone("America/Bogota")
         data = []
@@ -17,6 +22,6 @@ def show_access_logs(logs):
             })
         df = pd.DataFrame(data)
         df.index = range(1, len(df) + 1)
-        df = df.iloc[::-1]
+        df = df.iloc[::-1]  # mostrar último acceso primero
         st.subheader("📜 Historial de accesos")
         st.dataframe(df, use_container_width=True)
