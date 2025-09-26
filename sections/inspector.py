@@ -1,4 +1,3 @@
-# sections/inspector.py
 import streamlit as st
 import pytz
 from datetime import datetime
@@ -6,10 +5,19 @@ import hashlib
 from urllib.parse import urlparse, parse_qs
 from geo_utils import formato_gms_con_hemisferio
 
+# ---------------------------
+# Funciones para inspección
+# ---------------------------
+
 def show_latest_record(latest, geo_data):
+    """
+    Muestra en Streamlit el estado del último registro de foto.
+    - latest: dict con información del último registro en Mongo
+    - geo_data: dict con datos de geolocalización actuales
+    """
     colombia = pytz.timezone("America/Bogota")
 
-    # Fecha última verificación
+    # Procesar fecha de la última verificación
     checked_at = latest.get("checked_at")
     if isinstance(checked_at, datetime):
         if checked_at.tzinfo is None:
@@ -18,7 +26,7 @@ def show_latest_record(latest, geo_data):
     else:
         checked_at_str = "❌ No disponible"
 
-    # GeoData
+    # Procesar coordenadas y formato GMS
     if geo_data and "lat" in geo_data and "lon" in geo_data:
         lat = geo_data["lat"]
         lon = geo_data["lon"]
@@ -27,6 +35,7 @@ def show_latest_record(latest, geo_data):
         lat = lon = None
         lat_gms_str = lon_gms_str = None
 
+    # Mostrar JSON con estado actual
     st.subheader("🔍 Inspector de estado")
     st.json({
         "Último Hash": latest.get("hash") or latest.get("hash_value", "❌ No disponible"),
@@ -43,7 +52,14 @@ def show_latest_record(latest, geo_data):
         }
     })
 
+
 def show_debug(url, geo_data):
+    """
+    Muestra información de debug de un URL nuevo.
+    - url: string del URL ingresado
+    - geo_data: dict con geolocalización
+    Devuelve el hash SHA256 del URL.
+    """
     hash_value = hashlib.sha256(url.encode()).hexdigest()
     st.subheader("🛠️ Inspector DEBUG")
     st.json({
@@ -54,7 +70,11 @@ def show_debug(url, geo_data):
     })
     return hash_value
 
+
 def compare_urls(url_mongo, nuevo_url):
+    """
+    Compara el URL actual en Mongo con un URL nuevo y muestra diferencias en parámetros.
+    """
     from streamlit import markdown, info, error
     if url_mongo:
         error("❌ El link en Mongo es DIFERENTE al nuevo")
