@@ -82,8 +82,10 @@ if latest:
     url_manual = "https://instagram.feoh4-3.fna.fbcdn.net/v/t51.2885-19/548878794_18524321074061703_2757381932676116877_n.jpg?stp=dst-jpg_s320x320_tt6&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby43MjguYzIifQ&_nc_ht=instagram.feoh4-3.fna.fbcdn.net&_nc_cat=103&_nc_oc=Q6cZ2QGrT_eK1VJqrn9l5kH3TQozgN3drJ3au4uPl9hCjQowBwmGjIqTUq6vTM1zmw1p1mwCkucnK_BooQSwTB3xDJRd&_nc_ohc=dNVSXWIH1CMQ7kNvwExP4l5&_nc_gid=iimf2mgnXbswpxNZ26RnTg&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_AfZkhVo5CSsxN6G0Tm0OKYrVTiH3nAyJmqDZpKoaEgTf6Q&oe=68DBBC19&_nc_sid=8b3546"
 
     st.subheader("🧾 Comparación de URLs")
-    st.write("🔗 URL en Mongo:", url_mongo)
-    st.write("🔗 URL manual:", url_manual)
+    st.write("🔗 URL en Mongo:")
+    st.code(url_mongo, language="text")
+    st.write("🔗 URL manual:")
+    st.code(url_manual, language="text")
 
     # Verificar igualdad
     if url_mongo == url_manual:
@@ -91,17 +93,25 @@ if latest:
     else:
         st.error("❌ El link en Mongo es DIFERENTE al manual")
 
-        # Generar diferencias carácter por carácter
-        diff = difflib.ndiff(url_mongo, url_manual)
+        # Resaltar diferencias sobre el string de Mongo
+        diff = difflib.SequenceMatcher(None, url_mongo, url_manual)
+        highlighted = []
+        last_end = 0
 
-        st.write("🔍 Diferencias encontradas (resaltando cambios):")
-        for d in diff:
-            if d.startswith("-"):
-                # Mostrar en negrita lo que estaba antes (Mongo)
-                st.markdown(f"- **{d[2:]}** (estaba en Mongo)")
-            elif d.startswith("+"):
-                # Mostrar normal lo nuevo (Manual)
-                st.markdown(f"+ {d[2:]} (nuevo en Manual)")
+        for tag, i1, i2, j1, j2 in diff.get_opcodes():
+            if tag == "equal":
+                highlighted.append(url_mongo[i1:i2])
+            elif tag in ("replace", "delete"):
+                # Parte distinta en Mongo → se pone en negrita
+                highlighted.append("**" + url_mongo[i1:i2] + "**")
+            elif tag == "insert":
+                # Insert en manual → no está en Mongo, se ignora en resaltado
+                pass
+            last_end = i2
+
+        highlighted_url = "".join(highlighted)
+        st.markdown("🔍 **Diferencias resaltadas en el link de Mongo:**")
+        st.markdown(highlighted_url)
 
     # ==============================
     # Mostrar la imagen
