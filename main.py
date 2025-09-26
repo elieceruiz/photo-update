@@ -6,7 +6,7 @@ import streamlit as st
 from datetime import datetime
 import pytz
 import pandas as pd
-import hashlib  # 👈 para generar hash
+import hashlib
 from urllib.parse import urlparse, parse_qs
 
 # Módulos locales
@@ -21,6 +21,7 @@ from geo_utils import formato_gms_con_hemisferio
 st.set_page_config(page_title="📸 Update", layout="centered")
 colombia = pytz.timezone("America/Bogota")
 
+# Estado de sesión
 if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
 if "geo_data" not in st.session_state or st.session_state.geo_data is None:
@@ -35,21 +36,26 @@ st.title("📸 Update")
 # Cargar datos iniciales
 # ==============================
 with st.spinner("Cargando ubicación y datos, por favor espere..."):
+    # Captura geolocalización → se guarda en st.session_state.geo_data
     handle_geolocation(st.session_state)
     latest = get_latest_record()
 
 # ==============================
-# Si hay registro
+# Si hay registro previo
 # ==============================
 if latest:
     st.subheader("🔍 Inspector de estado")
 
+    # Última fecha de verificación → mostrar en Bogotá
     checked_at = latest.get("checked_at")
     if isinstance(checked_at, datetime):
         if checked_at.tzinfo is None:
             checked_at = checked_at.replace(tzinfo=pytz.UTC)
-        checked_at = checked_at.astimezone(colombia).strftime("%d %b %y %H:%M")
+        checked_at_str = checked_at.astimezone(colombia).strftime("%d %b %y %H:%M")
+    else:
+        checked_at_str = "Nunca"
 
+    # GeoData actual de sesión
     if st.session_state.geo_data and "lat" in st.session_state.geo_data and "lon" in st.session_state.geo_data:
         lat = st.session_state.geo_data["lat"]
         lon = st.session_state.geo_data["lon"]
@@ -58,17 +64,18 @@ if latest:
         lat = lon = None
         lat_gms_str = lon_gms_str = None
 
+    # Inspector de estado
     st.json({
         "Último Hash": latest.get("hash"),
-        "Última verificación": checked_at or "Nunca",
-        "Ubicación": {
+        "Última verificación": checked_at_str,
+        "Ubicación actual": {
             "decimal": {
                 "lat": lat if lat is not None else "No detectada",
                 "lon": lon if lon is not None else "No detectada",
             },
             "GMS": {
-                "lat": lat_gms_str if lat_gms_str is not None else "No detectada",
-                "lon": lon_gms_str if lon_gms_str is not None else "No detectada",
+                "lat": lat_gms_str if lat_gms_str else "No detectada",
+                "lon": lon_gms_str if lon_gms_str else "No detectada",
             }
         }
     })
@@ -82,7 +89,7 @@ if latest:
     st.write("🔗 URL en Mongo:")
     st.code(url_mongo, language="text")
 
-    # Campo para ingresar nuevo link
+    # Campo input para nuevo URL
     nuevo_url = st.text_input("✏️ Ingresa nuevo enlace para comparar y registrar")
 
     if nuevo_url:
@@ -91,7 +98,7 @@ if latest:
         else:
             st.error("❌ El link en Mongo es DIFERENTE al nuevo")
 
-            # Comparación detallada
+            # Comparación de parámetros de query
             mongo_params = parse_qs(urlparse(url_mongo).query)
             nuevo_params = parse_qs(urlparse(nuevo_url).query)
             todas_claves = set(mongo_params.keys()) | set(nuevo_params.keys())
@@ -117,7 +124,7 @@ if latest:
             st.json({
                 "Nuevo URL": nuevo_url,
                 "Hash generado": hash_value,
-                "Fecha UTC": datetime.utcnow().strftime("%d %b %y %H:%M"),
+                "Fecha (UTC)": datetime.utcnow().strftime("%d %b %y %H:%M"),
                 "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
             })
 
@@ -126,15 +133,15 @@ if latest:
                 insert_photo_record(
                     nuevo_url,
                     hash_value,
-                    datetime.utcnow(),
+                    datetime.utcnow(),      # siempre UTC
                     st.session_state.geo_data
                 )
-                st.success("✅ Nuevo enlace guardado en Mongo con hash, fecha y ubicación")
+                st.success("✅ Nuevo enlace guardado en Mongo con hash, fecha (UTC) y ubicación")
             except Exception as e:
                 st.error(f"💥 Error en insert_photo_record: {e}")
 
     # ==============================
-    # Mostrar imagen
+    # Mostrar imagen actual
     # ==============================
     try:
         img_bytes = download_image(url_mongo)
@@ -146,7 +153,7 @@ if latest:
         st.error(f"❌ Error: {e}")
 
 # ==============================
-# Si NO hay registros
+# Si NO hay registros previos
 # ==============================
 else:
     st.warning("⚠️ No hay fotos registradas en la base de datos.")
@@ -159,7 +166,7 @@ else:
         st.json({
             "Primer URL": nuevo_url,
             "Hash generado": hash_value,
-            "Fecha UTC": datetime.utcnow().strftime("%d %b %y %H:%M"),
+            "Fecha (UTC)": datetime.utcnow().strftime("%d %b %y %H:%M"),
             "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
         })
 
@@ -167,15 +174,15 @@ else:
             insert_photo_record(
                 nuevo_url,
                 hash_value,
-                datetime.utcnow(),
+                datetime.utcnow(),      # UTC
                 st.session_state.geo_data
             )
-            st.success("✅ Primer enlace guardado en Mongo con hash, fecha y ubicación")
+            st.success("✅ Primer enlace guardado en Mongo con hash, fecha (UTC) y ubicación")
         except Exception as e:
             st.error(f"💥 Error en insert_photo_record: {e}")
 
 # ==============================
-# Botón verificación manual
+# Botón de verificación manual
 # ==============================
 if st.button("🔄 Verificar foto ahora"):
     changed, msg = check_and_update_photo()
@@ -185,7 +192,7 @@ if st.button("🔄 Verificar foto ahora"):
         st.info(msg)
 
 # ==============================
-# Historial accesos
+# Historial de accesos
 # ==============================
 logs = get_access_logs()
 if logs:
@@ -200,6 +207,6 @@ if logs:
         })
     df = pd.DataFrame(data)
     df.index = range(1, len(df) + 1)
-    df = df.iloc[::-1]
+    df = df.iloc[::-1]  # invertir para ver lo más reciente arriba
     st.subheader("📜 Historial de accesos")
     st.dataframe(df, use_container_width=True)
