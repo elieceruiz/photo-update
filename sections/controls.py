@@ -1,6 +1,6 @@
+# sections/controls.py
 import streamlit as st
 from datetime import datetime
-import pytz
 from db import insert_photo_record
 from sections.inspector import show_debug, compare_urls
 
@@ -15,7 +15,6 @@ def handle_url_input(latest, geo_data):
     - Actualizar URL existente
     Retorna True si se guardó un nuevo registro.
     """
-    # URL actual en Mongo
     url_mongo = latest.get("photo_url", "") if latest else ""
     nuevo_url = None
 
@@ -44,7 +43,7 @@ def handle_url_input(latest, geo_data):
             insert_photo_record(
                 photo_url=nuevo_url,
                 hash_value=hash_value,
-                checked_at=datetime.utcnow().replace(tzinfo=pytz.UTC),
+                checked_at=datetime.utcnow(),
                 geo_data=geo_data
             )
             if url_mongo:
