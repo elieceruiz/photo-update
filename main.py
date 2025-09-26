@@ -6,16 +6,17 @@ import streamlit as st
 from datetime import datetime
 import pytz
 import pandas as pd
-from urllib.parse import urlparse, parse_qs  # 👈 nuevo, para analizar parámetros
+import hashlib  # 👈 para generar hash
+from urllib.parse import urlparse, parse_qs
 
-# Módulos locales que encapsulan lógica
+# Módulos locales
 from geolocation import handle_geolocation
 from photo_checker import check_and_update_photo, download_image
-from db import get_latest_record, get_access_logs
+from db import get_latest_record, get_access_logs, insert_photo_record  # 👈 nuevo import
 from geo_utils import formato_gms_con_hemisferio
 
 # ==============================
-# Configuración inicial de la app
+# Configuración inicial
 # ==============================
 st.set_page_config(page_title="📸 Update", layout="centered")
 colombia = pytz.timezone("America/Bogota")
@@ -26,7 +27,7 @@ if "geo_data" not in st.session_state or st.session_state.geo_data is None:
     st.session_state.geo_data = None
 
 # ==============================
-# Título principal
+# Título
 # ==============================
 st.title("📸 Update")
 
@@ -38,7 +39,7 @@ with st.spinner("Cargando ubicación y datos, por favor espere..."):
     latest = get_latest_record()
 
 # ==============================
-# Bloque: si existe registro
+# Si hay registro
 # ==============================
 if latest:
     st.subheader("🔍 Inspector de estado")
@@ -76,7 +77,7 @@ if latest:
     # Comparación de URLs
     # ==============================
     url_mongo = latest.get("photo_url", "")
-    url_manual = "https://instagram.feoh4-3.fna.fbcdn.net/v/t51.2885-19/548878794_18524321074061703_2757381932676116877_n.jpg?stp=dst-jpg_s320x320_tt6&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby43MjguYzIifQ&_nc_ht=instagram.feoh4-3.fna.fbcdn.net&_nc_cat=103&_nc_oc=Q6cZ2QGrT_eK1VJqrn9l5kH3TQozgN3drJ3au4uPl9hCjQowBwmGjIqTUq6vTM1zmw1p1mwCkucnK_BooQSwTB3xDJRd&_nc_ohc=dNVSXWIH1CMQ7kNvwExP4l5&_nc_gid=iimf2mgnXbswpxNZ26RnTg&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_AfZkhVo5CSsxN6G0Tm0OKYrVTiH3nAyJmqDZpKoaEgTf6Q&oe=68DBBC19&_nc_sid=8b3546"
+    url_manual = "https://instagram.feoh4-3.fna.fbcdn.net/..."  # 👈 tu URL manual
 
     st.subheader("🧾 Comparación de URLs")
     st.write("🔗 URL en Mongo:")
@@ -89,7 +90,7 @@ if latest:
     else:
         st.error("❌ El link en Mongo es DIFERENTE al manual")
 
-        # --- Comparación clara por parámetros ---
+        # Comparación detallada
         mongo_params = parse_qs(urlparse(url_mongo).query)
         manual_params = parse_qs(urlparse(url_manual).query)
         todas_claves = set(mongo_params.keys()) | set(manual_params.keys())
@@ -99,7 +100,6 @@ if latest:
         for clave in todas_claves:
             val_mongo = mongo_params.get(clave, ["-"])[0]
             val_manual = manual_params.get(clave, ["-"])[0]
-
             if val_mongo != val_manual:
                 diferencias = True
                 st.markdown(f"- {clave} = {val_mongo}  (Mongo)")
@@ -108,8 +108,17 @@ if latest:
         if not diferencias:
             st.info("ℹ️ No se encontraron diferencias en los parámetros. Puede que cambie solo la parte base del link.")
 
+        # ==============================
+        # Campo para ingresar nuevo link
+        # ==============================
+        nuevo_url = st.text_input("✏️ Ingresar nuevo enlace válido")
+        if nuevo_url:
+            hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
+            insert_photo_record(nuevo_url, hash_value)
+            st.success("✅ Nuevo enlace guardado en Mongo con hash generado")
+
     # ==============================
-    # Mostrar la imagen
+    # Mostrar imagen
     # ==============================
     try:
         img_bytes = download_image(url_mongo)
@@ -120,11 +129,19 @@ if latest:
     except Exception as e:
         st.error(f"❌ Error: {e}")
 
+# ==============================
+# Si NO hay registros
+# ==============================
 else:
     st.warning("⚠️ No hay fotos registradas en la base de datos.")
+    nuevo_url = st.text_input("✏️ Registrar primer URL de foto")
+    if nuevo_url:
+        hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
+        insert_photo_record(nuevo_url, hash_value)
+        st.success("✅ Primer enlace guardado en Mongo con hash generado")
 
 # ==============================
-# Botón para verificar manualmente
+# Botón verificación manual
 # ==============================
 if st.button("🔄 Verificar foto ahora"):
     changed, msg = check_and_update_photo()
@@ -134,7 +151,7 @@ if st.button("🔄 Verificar foto ahora"):
         st.info(msg)
 
 # ==============================
-# Historial de accesos
+# Historial accesos
 # ==============================
 logs = get_access_logs()
 if logs:
