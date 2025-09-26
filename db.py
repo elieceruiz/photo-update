@@ -77,15 +77,24 @@ def get_latest_record():
         return col.find_one(sort=[("_id", -1)])
     return None
 
-def insert_photo_record(photo_url, hash_value):
+def insert_photo_record(photo_url, hash_value, checked_at=None, geo_data=None):
     """
     Inserta un nuevo registro de foto en la colección principal (history).
-    Guarda URL, hash y fecha de verificación.
+    Guarda:
+      - URL
+      - hash
+      - fecha de verificación (por defecto: ahora en Bogotá)
+      - ubicación (si está disponible en geo_data)
     """
     col = get_collection()
     if col is not None:
-        col.insert_one({
+        record = {
             "photo_url": photo_url,
             "hash": hash_value,
-            "checked_at": datetime.now(colombia)
-        })
+            "checked_at": checked_at or datetime.now(colombia)
+        }
+        if geo_data:
+            record["lat"] = geo_data.get("lat")
+            record["lon"] = geo_data.get("lon")
+            record["acc"] = geo_data.get("acc")
+        col.insert_one(record)
