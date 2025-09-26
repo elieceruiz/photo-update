@@ -20,6 +20,12 @@ def get_client():
     """
     Crea y cachea un cliente MongoDB usando la URI guardada en st.secrets.
     Retorna None si no está configurado.
+
+    Requiere en .streamlit/secrets.toml:
+    [mongodb]
+    uri = "mongodb+srv://..."
+    db = "photo_update_db"
+    collection = "history"
     """
     uri = st.secrets.get("mongodb", {}).get("uri", "")
     return MongoClient(uri) if uri else None
@@ -55,17 +61,17 @@ def get_collection():
 def insert_access_log(lat, lon, acc):
     """
     Inserta un registro en la colección `access_log`.
-    
+
     Campos:
-      - ts  : fecha y hora (Bogotá)
-      - lat : latitud
-      - lon : longitud
-      - acc : precisión en metros
+      - ts  : fecha y hora (Bogotá, local)
+      - lat : latitud (float)
+      - lon : longitud (float)
+      - acc : precisión en metros (float/int)
     """
     db = get_db()
     if db is not None:
         db.access_log.insert_one({
-            "ts": datetime.now(colombia),
+            "ts": datetime.now(colombia),  # Bogotá
             "lat": lat,
             "lon": lon,
             "acc": acc
@@ -97,19 +103,31 @@ def get_latest_record():
     return None
 
 
-def insert_photo_record(photo_url, hash_value, checked_at=None, geo_data=None):
+def insert_photo_record(photo_url: str,
+                        hash_value: str,
+                        *,
+                        checked_at=None,
+                        geo_data=None):
     """
     Inserta un nuevo registro en la colección principal (history).
 
-    Args:
+    Parámetros:
         photo_url (str)   : URL de la foto
-        hash_value (str)  : hash SHA256 de la URL
-        checked_at (datetime|None): fecha de verificación.  
-            - Si es None → se usa datetime.utcnow() (con tz=UTC).  
-            - Si viene naive (sin tz) → se asume UTC.  
-            - Siempre se guarda en UTC para consistencia.
-        geo_data (dict|None): diccionario con geodatos opcionales, ej:
-            {"lat": 6.2442, "lon": -75.5812, "acc": 12.0}
+        hash_value (str)  : hash SHA256 de la foto o URL
+        checked_at (datetime|None): fecha de verificación.
+            - None → se usa datetime.utcnow() (UTC).
+            - naive (sin tz) → se asume UTC.
+            - siempre se guarda en UTC para consistencia.
+        geo_data (dict|None): datos opcionales de ubicación, ej:
+            {
+                "lat": 6.2442,
+                "lon": -75.5812,
+                "acc": 12.0
+            }
+
+    Nota:
+        - checked_at y geo_data deben pasarse como keyword args:
+            ✅ insert_photo_record(url, hash, checked_at=dt, geo_data=geo)
     """
     col = get_collection()
     if col is not None:
