@@ -1,9 +1,21 @@
-# geolocation.py
 from streamlit_js_eval import get_geolocation
 import streamlit as st
 from db import insert_access_log
 
 def handle_geolocation(state):
+    """
+    Detecta la ubicación del usuario usando el navegador.
+    - state: st.session_state de Streamlit
+    Inicializa claves si no existen.
+    Registra acceso en DB y actualiza state.geo_data.
+    """
+    # Inicializar claves
+    if "access_logged" not in state:
+        state.access_logged = False
+    if "geo_data" not in state:
+        state.geo_data = None
+
+    # Solo ejecutar si no se ha registrado el acceso
     if not state.access_logged:
         geo = get_geolocation()
         if geo:
