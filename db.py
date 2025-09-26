@@ -11,6 +11,8 @@ import pytz
 # Zona horaria local (Bogotá)
 colombia = pytz.timezone("America/Bogota")
 
+print("✅ db.py cargado (versión limpia con insert_photo_record)")
+
 # ==============================
 # Conexión MongoDB
 # ==============================
@@ -115,19 +117,7 @@ def insert_photo_record(photo_url: str,
         photo_url (str)   : URL de la foto
         hash_value (str)  : hash SHA256 de la foto o URL
         checked_at (datetime|None): fecha de verificación.
-            - None → se usa datetime.utcnow() (UTC).
-            - naive (sin tz) → se asume UTC.
-            - siempre se guarda en UTC para consistencia.
-        geo_data (dict|None): datos opcionales de ubicación, ej:
-            {
-                "lat": 6.2442,
-                "lon": -75.5812,
-                "acc": 12.0
-            }
-
-    Nota:
-        - checked_at y geo_data deben pasarse como keyword args:
-            ✅ insert_photo_record(url, hash, checked_at=dt, geo_data=geo)
+        geo_data (dict|None): datos opcionales de ubicación.
     """
     col = get_collection()
     if col is not None:
@@ -154,3 +144,4 @@ def insert_photo_record(photo_url: str,
 
         # Insertar en Mongo
         col.insert_one(record)
+        print(f"✅ insert_photo_record OK: {photo_url[:40]}... {hash_value[:10]}")
