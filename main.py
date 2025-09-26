@@ -87,9 +87,10 @@ if latest:
 
     if nuevo_url:
         if url_mongo == nuevo_url:
-            st.success("✅ El link en Mongo es IGUAL al nuevo")
+            # ✅ Caso: el link no cambió
+            st.success("✅ El link en Mongo es IGUAL al nuevo. No se requiere actualización.")
         else:
-            # Solo mostramos comparación si son diferentes
+            # ⚠️ Caso: el link es diferente → solo aquí mostramos la comparación
             st.subheader("🧾 Comparación de URLs")
             st.error("❌ El link en Mongo es DIFERENTE al nuevo")
 
