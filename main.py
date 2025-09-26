@@ -109,15 +109,29 @@ if latest:
             if not diferencias:
                 st.info("ℹ️ No se encontraron diferencias en los parámetros. Puede que cambie solo la parte base del link.")
 
-            # Guardar nuevo registro en Mongo
+            # ==============================
+            # Inspector DEBUG antes de guardar
+            # ==============================
+            st.subheader("🛠️ Inspector DEBUG")
             hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
-            insert_photo_record(
-                nuevo_url,
-                hash_value,
-                datetime.utcnow(),
-                st.session_state.geo_data
-            )
-            st.success("✅ Nuevo enlace guardado en Mongo con hash, fecha y ubicación")
+            st.json({
+                "Nuevo URL": nuevo_url,
+                "Hash generado": hash_value,
+                "Fecha UTC": datetime.utcnow().strftime("%d %b %y %H:%M"),
+                "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
+            })
+
+            # Guardar nuevo registro en Mongo
+            try:
+                insert_photo_record(
+                    nuevo_url,
+                    hash_value,
+                    datetime.utcnow(),
+                    st.session_state.geo_data
+                )
+                st.success("✅ Nuevo enlace guardado en Mongo con hash, fecha y ubicación")
+            except Exception as e:
+                st.error(f"💥 Error en insert_photo_record: {e}")
 
     # ==============================
     # Mostrar imagen
@@ -139,13 +153,26 @@ else:
     nuevo_url = st.text_input("✏️ Registrar primer URL de foto")
     if nuevo_url:
         hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
-        insert_photo_record(
-            nuevo_url,
-            hash_value,
-            datetime.utcnow(),
-            st.session_state.geo_data
-        )
-        st.success("✅ Primer enlace guardado en Mongo con hash, fecha y ubicación")
+
+        # Inspector DEBUG inicial
+        st.subheader("🛠️ Inspector DEBUG")
+        st.json({
+            "Primer URL": nuevo_url,
+            "Hash generado": hash_value,
+            "Fecha UTC": datetime.utcnow().strftime("%d %b %y %H:%M"),
+            "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
+        })
+
+        try:
+            insert_photo_record(
+                nuevo_url,
+                hash_value,
+                datetime.utcnow(),
+                st.session_state.geo_data
+            )
+            st.success("✅ Primer enlace guardado en Mongo con hash, fecha y ubicación")
+        except Exception as e:
+            st.error(f"💥 Error en insert_photo_record: {e}")
 
 # ==============================
 # Botón verificación manual
