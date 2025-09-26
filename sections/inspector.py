@@ -1,18 +1,15 @@
 # sections/inspector.py
 import streamlit as st
-from datetime import datetime
 import pytz
+from datetime import datetime
+import hashlib
+from urllib.parse import urlparse, parse_qs
 from geo_utils import formato_gms_con_hemisferio
 
-def render_inspector(latest, geo_data):
-    if not latest:
-        st.warning("⚠️ No hay fotos registradas en la base de datos.")
-        return
-
-    st.subheader("🔍 Inspector de estado")
+def show_latest_record(latest, geo_data):
+    colombia = pytz.timezone("America/Bogota")
 
     # Fecha última verificación
-    colombia = pytz.timezone("America/Bogota")
     checked_at = latest.get("checked_at")
     if isinstance(checked_at, datetime):
         if checked_at.tzinfo is None:
@@ -30,7 +27,7 @@ def render_inspector(latest, geo_data):
         lat = lon = None
         lat_gms_str = lon_gms_str = None
 
-    # Inspector JSON
+    st.subheader("🔍 Inspector de estado")
     st.json({
         "Último Hash": latest.get("hash") or latest.get("hash_value", "❌ No disponible"),
         "Última verificación": checked_at_str,
@@ -45,3 +42,37 @@ def render_inspector(latest, geo_data):
             }
         }
     })
+
+def show_debug(url, geo_data):
+    hash_value = hashlib.sha256(url.encode()).hexdigest()
+    st.subheader("🛠️ Inspector DEBUG")
+    st.json({
+        "URL": url,
+        "Hash generado": hash_value,
+        "Fecha (UTC)": datetime.utcnow().strftime("%d %b %y %H:%M"),
+        "Geo Data": geo_data if geo_data else "❌ No detectada"
+    })
+    return hash_value
+
+def compare_urls(url_mongo, nuevo_url):
+    from streamlit import markdown, info, error
+    if url_mongo:
+        error("❌ El link en Mongo es DIFERENTE al nuevo")
+        mongo_params = parse_qs(urlparse(url_mongo).query)
+        nuevo_params = parse_qs(urlparse(nuevo_url).query)
+        todas_claves = set(mongo_params.keys()) | set(nuevo_params.keys())
+
+        diferencias = []
+        for clave in todas_claves:
+            val_mongo = mongo_params.get(clave, ["-"])[0]
+            val_nuevo = nuevo_params.get(clave, ["-"])[0]
+            if val_mongo != val_nuevo:
+                diferencias.append((clave, val_mongo, val_nuevo))
+
+        if diferencias:
+            markdown("🔍 **Diferencias encontradas:**")
+            for clave, val_mongo, val_nuevo in diferencias:
+                markdown(f"- {clave} = {val_mongo}  (Mongo)")
+                markdown(f"+ {clave} = {val_nuevo}  (Nuevo)")
+        else:
+            info("ℹ️ No se encontraron diferencias en los parámetros. Puede que cambie solo la parte base del link.")
