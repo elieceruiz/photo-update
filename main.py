@@ -93,12 +93,15 @@ if latest:
 
         # Generar diferencias carácter por carácter
         diff = difflib.ndiff(url_mongo, url_manual)
-        changes = [d for d in diff if d[0] in ("-", "+")]
 
-        if changes:
-            st.write("🔍 Diferencias encontradas (carácter por carácter):")
-            for c in changes:
-                st.write(c)
+        st.write("🔍 Diferencias encontradas (resaltando cambios):")
+        for d in diff:
+            if d.startswith("-"):
+                # Mostrar en negrita lo que estaba antes (Mongo)
+                st.markdown(f"- **{d[2:]}** (estaba en Mongo)")
+            elif d.startswith("+"):
+                # Mostrar normal lo nuevo (Manual)
+                st.markdown(f"+ {d[2:]} (nuevo en Manual)")
 
     # ==============================
     # Mostrar la imagen
