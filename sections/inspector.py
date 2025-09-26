@@ -1,3 +1,4 @@
+# sections/inspector.py
 import streamlit as st
 import pytz
 from datetime import datetime
