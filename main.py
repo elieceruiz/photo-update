@@ -12,7 +12,7 @@ from urllib.parse import urlparse, parse_qs
 # Módulos locales
 from geolocation import handle_geolocation
 from photo_checker import check_and_update_photo, download_image
-from db import get_latest_record, get_access_logs, insert_photo_record  # 👈 actualizado
+from db import get_latest_record, get_access_logs, insert_photo_record
 from geo_utils import formato_gms_con_hemisferio
 
 # ==============================
@@ -77,42 +77,39 @@ if latest:
     # Comparación de URLs
     # ==============================
     url_mongo = latest.get("photo_url", "")
-    url_manual = "https://instagram.feoh4-3.fna.fbcdn.net/..."  # 👈 tu URL manual
 
     st.subheader("🧾 Comparación de URLs")
     st.write("🔗 URL en Mongo:")
     st.code(url_mongo, language="text")
-    st.write("🔗 URL manual:")
-    st.code(url_manual, language="text")
 
-    if url_mongo == url_manual:
-        st.success("✅ El link en Mongo es IGUAL al manual")
-    else:
-        st.error("❌ El link en Mongo es DIFERENTE al manual")
+    # Campo para ingresar nuevo link
+    nuevo_url = st.text_input("✏️ Ingresa nuevo enlace para comparar y registrar")
 
-        # Comparación detallada
-        mongo_params = parse_qs(urlparse(url_mongo).query)
-        manual_params = parse_qs(urlparse(url_manual).query)
-        todas_claves = set(mongo_params.keys()) | set(manual_params.keys())
+    if nuevo_url:
+        if url_mongo == nuevo_url:
+            st.success("✅ El link en Mongo es IGUAL al nuevo")
+        else:
+            st.error("❌ El link en Mongo es DIFERENTE al nuevo")
 
-        st.markdown("🔍 **Diferencias encontradas por parámetro:**")
-        diferencias = False
-        for clave in todas_claves:
-            val_mongo = mongo_params.get(clave, ["-"])[0]
-            val_manual = manual_params.get(clave, ["-"])[0]
-            if val_mongo != val_manual:
-                diferencias = True
-                st.markdown(f"- {clave} = {val_mongo}  (Mongo)")
-                st.markdown(f"+ {clave} = {val_manual}  (Manual)")
+            # Comparación detallada
+            mongo_params = parse_qs(urlparse(url_mongo).query)
+            nuevo_params = parse_qs(urlparse(nuevo_url).query)
+            todas_claves = set(mongo_params.keys()) | set(nuevo_params.keys())
 
-        if not diferencias:
-            st.info("ℹ️ No se encontraron diferencias en los parámetros. Puede que cambie solo la parte base del link.")
+            st.markdown("🔍 **Diferencias encontradas por parámetro:**")
+            diferencias = False
+            for clave in todas_claves:
+                val_mongo = mongo_params.get(clave, ["-"])[0]
+                val_nuevo = nuevo_params.get(clave, ["-"])[0]
+                if val_mongo != val_nuevo:
+                    diferencias = True
+                    st.markdown(f"- {clave} = {val_mongo}  (Mongo)")
+                    st.markdown(f"+ {clave} = {val_nuevo}  (Nuevo)")
 
-        # ==============================
-        # Campo para ingresar nuevo link
-        # ==============================
-        nuevo_url = st.text_input("✏️ Ingresar nuevo enlace válido")
-        if nuevo_url:
+            if not diferencias:
+                st.info("ℹ️ No se encontraron diferencias en los parámetros. Puede que cambie solo la parte base del link.")
+
+            # Guardar nuevo registro en Mongo
             hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
             insert_photo_record(
                 nuevo_url,
