@@ -88,10 +88,20 @@ def insert_photo_record(photo_url, hash_value, checked_at=None, geo_data=None):
     """
     col = get_collection()
     if col is not None:
+        # Normalizar fecha
+        if checked_at is None:
+            checked_at = datetime.now(colombia)
+        elif checked_at.tzinfo is None:
+            # si no tiene tz, asumimos UTC y convertimos a Bogotá
+            checked_at = checked_at.replace(tzinfo=pytz.UTC).astimezone(colombia)
+        else:
+            # si ya tiene tz, lo pasamos a Bogotá
+            checked_at = checked_at.astimezone(colombia)
+
         record = {
             "photo_url": photo_url,
             "hash": hash_value,
-            "checked_at": checked_at or datetime.now(colombia)
+            "checked_at": checked_at
         }
         if geo_data:
             record["lat"] = geo_data.get("lat")
