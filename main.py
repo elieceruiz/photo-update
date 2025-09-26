@@ -5,21 +5,20 @@ import streamlit as st
 from datetime import datetime
 import pytz
 import pandas as pd
-import difflib
+from urllib.parse import urlparse, parse_qs  # 👈 nuevo, para analizar parámetros
 
 # Módulos locales que encapsulan lógica
-from geolocation import handle_geolocation          # Detecta y guarda la ubicación
-from photo_checker import check_and_update_photo, download_image  # Verifica cambios de foto y descarga
-from db import get_latest_record, get_access_logs   # Acceso a la base de datos Mongo
-from geo_utils import formato_gms_con_hemisferio    # Convierte coordenadas decimales a formato GMS
+from geolocation import handle_geolocation
+from photo_checker import check_and_update_photo, download_image
+from db import get_latest_record, get_access_logs
+from geo_utils import formato_gms_con_hemisferio
 
 # ==============================
 # Configuración inicial de la app
 # ==============================
 st.set_page_config(page_title="📸 Update", layout="centered")
-colombia = pytz.timezone("America/Bogota")  # Zona horaria de referencia
+colombia = pytz.timezone("America/Bogota")
 
-# Inicializar variables de sesión si no existen
 if "access_logged" not in st.session_state:
     st.session_state.access_logged = False
 if "geo_data" not in st.session_state or st.session_state.geo_data is None:
@@ -34,8 +33,8 @@ st.title("📸 Update")
 # Cargar datos iniciales
 # ==============================
 with st.spinner("Cargando ubicación y datos, por favor espere..."):
-    handle_geolocation(st.session_state)   # Detectar ubicación
-    latest = get_latest_record()           # Obtener último registro de MongoDB
+    handle_geolocation(st.session_state)
+    latest = get_latest_record()
 
 # ==============================
 # Bloque: si existe registro
@@ -43,23 +42,20 @@ with st.spinner("Cargando ubicación y datos, por favor espere..."):
 if latest:
     st.subheader("🔍 Inspector de estado")
 
-    # Procesar fecha de última verificación
     checked_at = latest.get("checked_at")
     if isinstance(checked_at, datetime):
-        if checked_at.tzinfo is None:  # Si no tiene tz, forzar UTC
+        if checked_at.tzinfo is None:
             checked_at = checked_at.replace(tzinfo=pytz.UTC)
         checked_at = checked_at.astimezone(colombia).strftime("%d %b %y %H:%M")
 
-    # Procesar ubicación
     if st.session_state.geo_data and "lat" in st.session_state.geo_data and "lon" in st.session_state.geo_data:
         lat = st.session_state.geo_data["lat"]
         lon = st.session_state.geo_data["lon"]
-        lat_gms_str, lon_gms_str = formato_gms_con_hemisferio(lat, lon)  # Pasar a formato GMS
+        lat_gms_str, lon_gms_str = formato_gms_con_hemisferio(lat, lon)
     else:
         lat = lon = None
         lat_gms_str = lon_gms_str = None
 
-    # Mostrar estado en JSON
     st.json({
         "Último Hash": latest.get("hash"),
         "Última verificación": checked_at or "Nunca",
@@ -78,7 +74,7 @@ if latest:
     # ==============================
     # Comparación de URLs
     # ==============================
-    url_mongo = latest.get("photo_url", "")   # URL guardada en Mongo
+    url_mongo = latest.get("photo_url", "")
     url_manual = "https://instagram.feoh4-3.fna.fbcdn.net/v/t51.2885-19/548878794_18524321074061703_2757381932676116877_n.jpg?stp=dst-jpg_s320x320_tt6&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby43MjguYzIifQ&_nc_ht=instagram.feoh4-3.fna.fbcdn.net&_nc_cat=103&_nc_oc=Q6cZ2QGrT_eK1VJqrn9l5kH3TQozgN3drJ3au4uPl9hCjQowBwmGjIqTUq6vTM1zmw1p1mwCkucnK_BooQSwTB3xDJRd&_nc_ohc=dNVSXWIH1CMQ7kNvwExP4l5&_nc_gid=iimf2mgnXbswpxNZ26RnTg&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_AfZkhVo5CSsxN6G0Tm0OKYrVTiH3nAyJmqDZpKoaEgTf6Q&oe=68DBBC19&_nc_sid=8b3546"
 
     st.subheader("🧾 Comparación de URLs")
@@ -87,37 +83,35 @@ if latest:
     st.write("🔗 URL manual:")
     st.code(url_manual, language="text")
 
-    # Verificar igualdad
     if url_mongo == url_manual:
         st.success("✅ El link en Mongo es IGUAL al manual")
     else:
         st.error("❌ El link en Mongo es DIFERENTE al manual")
 
-        # Resaltar diferencias sobre el string de Mongo
-        diff = difflib.SequenceMatcher(None, url_mongo, url_manual)
-        highlighted = []
-        last_end = 0
+        # --- Comparación clara por parámetros ---
+        mongo_params = parse_qs(urlparse(url_mongo).query)
+        manual_params = parse_qs(urlparse(url_manual).query)
+        todas_claves = set(mongo_params.keys()) | set(manual_params.keys())
 
-        for tag, i1, i2, j1, j2 in diff.get_opcodes():
-            if tag == "equal":
-                highlighted.append(url_mongo[i1:i2])
-            elif tag in ("replace", "delete"):
-                # Parte distinta en Mongo → se pone en negrita
-                highlighted.append("**" + url_mongo[i1:i2] + "**")
-            elif tag == "insert":
-                # Insert en manual → no está en Mongo, se ignora en resaltado
-                pass
-            last_end = i2
+        st.markdown("🔍 **Diferencias encontradas por parámetro:**")
+        diferencias = False
+        for clave in todas_claves:
+            val_mongo = mongo_params.get(clave, ["-"])[0]
+            val_manual = manual_params.get(clave, ["-"])[0]
 
-        highlighted_url = "".join(highlighted)
-        st.markdown("🔍 **Diferencias resaltadas en el link de Mongo:**")
-        st.markdown(highlighted_url)
+            if val_mongo != val_manual:
+                diferencias = True
+                st.markdown(f"- {clave} = {val_mongo}  (Mongo)")
+                st.markdown(f"+ {clave} = {val_manual}  (Manual)")
+
+        if not diferencias:
+            st.info("ℹ️ No se encontraron diferencias en los parámetros. Puede que cambie solo la parte base del link.")
 
     # ==============================
     # Mostrar la imagen
     # ==============================
     try:
-        img_bytes = download_image(url_mongo)   # Descarga la imagen de la URL en Mongo
+        img_bytes = download_image(url_mongo)
         if img_bytes:
             st.image(img_bytes, caption="Miniatura actual")
         else:
@@ -125,9 +119,6 @@ if latest:
     except Exception as e:
         st.error(f"❌ Error: {e}")
 
-# ==============================
-# Bloque: si NO hay registro
-# ==============================
 else:
     st.warning("⚠️ No hay fotos registradas en la base de datos.")
 
@@ -155,9 +146,8 @@ if logs:
             "Lon": f"{l.get('lon'):.6f}" if l.get("lon") else None,
             "±m": f"{int(l.get('acc'))}" if l.get("acc") else None,
         })
-    # Crear DataFrame con los accesos
     df = pd.DataFrame(data)
     df.index = range(1, len(df) + 1)
-    df = df.iloc[::-1]  # Ordenar de más reciente a más antiguo
+    df = df.iloc[::-1]
     st.subheader("📜 Historial de accesos")
     st.dataframe(df, use_container_width=True)
