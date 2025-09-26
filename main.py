@@ -12,7 +12,7 @@ from urllib.parse import urlparse, parse_qs
 # Módulos locales
 from geolocation import handle_geolocation
 from photo_checker import check_and_update_photo, download_image
-from db import get_latest_record, get_access_logs, insert_photo_record  # 👈 nuevo import
+from db import get_latest_record, get_access_logs, insert_photo_record  # 👈 actualizado
 from geo_utils import formato_gms_con_hemisferio
 
 # ==============================
@@ -114,8 +114,13 @@ if latest:
         nuevo_url = st.text_input("✏️ Ingresar nuevo enlace válido")
         if nuevo_url:
             hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
-            insert_photo_record(nuevo_url, hash_value)
-            st.success("✅ Nuevo enlace guardado en Mongo con hash generado")
+            insert_photo_record(
+                nuevo_url,
+                hash_value,
+                datetime.utcnow(),
+                st.session_state.geo_data
+            )
+            st.success("✅ Nuevo enlace guardado en Mongo con hash, fecha y ubicación")
 
     # ==============================
     # Mostrar imagen
@@ -137,8 +142,13 @@ else:
     nuevo_url = st.text_input("✏️ Registrar primer URL de foto")
     if nuevo_url:
         hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
-        insert_photo_record(nuevo_url, hash_value)
-        st.success("✅ Primer enlace guardado en Mongo con hash generado")
+        insert_photo_record(
+            nuevo_url,
+            hash_value,
+            datetime.utcnow(),
+            st.session_state.geo_data
+        )
+        st.success("✅ Primer enlace guardado en Mongo con hash, fecha y ubicación")
 
 # ==============================
 # Botón verificación manual
