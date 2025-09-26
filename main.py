@@ -6,14 +6,13 @@ import streamlit as st
 from datetime import datetime
 import pytz
 import pandas as pd
-import hashlib
-from urllib.parse import urlparse, parse_qs
 
 # Módulos locales
 from geolocation import handle_geolocation
 from photo_checker import check_and_update_photo, download_image
-from db import get_latest_record, get_access_logs, insert_photo_record
+from db import get_latest_record, get_access_logs
 from geo_utils import formato_gms_con_hemisferio
+from url_handler import show_url_input, process_new_url
 
 # ==============================
 # Configuración inicial
@@ -82,76 +81,10 @@ if latest:
     })
 
     # ==============================
-    # Input URL (condicional)
+    # Input condicional y procesamiento
     # ==============================
-    url_mongo = latest.get("photo_url", "")
-    nuevo_url = None
-
-    # Mostrar input solo si es primer registro o si check detectó cambio
-    if not url_mongo:
-        nuevo_url = st.text_input("✏️ Registrar primer URL de foto")
-    elif st.session_state.show_input:
-        nuevo_url = st.text_input("✏️ Ingresa nuevo enlace para comparar y registrar")
-
-    # ==============================
-    # Procesar nuevo enlace ingresado
-    # ==============================
-    if nuevo_url:
-        if url_mongo and url_mongo == nuevo_url:
-            # ✅ Caso: link igual → nada de comparación
-            st.success("✅ El link en Mongo es IGUAL al nuevo. No se requiere actualización.")
-            st.session_state.show_input = False  # ocultar de nuevo
-        else:
-            # ⚠️ Caso: link distinto → mostramos comparación y debug
-            st.subheader("🧾 Comparación de URLs")
-            if url_mongo:
-                st.error("❌ El link en Mongo es DIFERENTE al nuevo")
-
-                # Comparación de parámetros
-                mongo_params = parse_qs(urlparse(url_mongo).query) if url_mongo else {}
-                nuevo_params = parse_qs(urlparse(nuevo_url).query)
-                todas_claves = set(mongo_params.keys()) | set(nuevo_params.keys())
-
-                diferencias = []
-                for clave in todas_claves:
-                    val_mongo = mongo_params.get(clave, ["-"])[0]
-                    val_nuevo = nuevo_params.get(clave, ["-"])[0]
-                    if val_mongo != val_nuevo:
-                        diferencias.append((clave, val_mongo, val_nuevo))
-
-                if diferencias:
-                    st.markdown("🔍 **Diferencias encontradas:**")
-                    for clave, val_mongo, val_nuevo in diferencias:
-                        st.markdown(f"- {clave} = {val_mongo}  (Mongo)")
-                        st.markdown(f"+ {clave} = {val_nuevo}  (Nuevo)")
-                else:
-                    st.info("ℹ️ No se encontraron diferencias en los parámetros. Puede que cambie solo la parte base del link.")
-
-            # ==============================
-            # Inspector DEBUG
-            # ==============================
-            st.subheader("🛠️ Inspector DEBUG")
-            hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
-            st.json({
-                "Nuevo URL": nuevo_url,
-                "Hash generado": hash_value,
-                "Fecha (UTC)": datetime.utcnow().strftime("%d %b %y %H:%M"),
-                "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
-            })
-
-            # Guardar en Mongo
-            try:
-                insert_photo_record(
-                    photo_url=nuevo_url,
-                    hash_value=hash_value,
-                    checked_at=datetime.utcnow().replace(tzinfo=pytz.UTC),
-                    geo_data=st.session_state.geo_data
-                )
-                print(f"✅ Guardado en Mongo: {nuevo_url}")
-                st.success("✅ Nuevo enlace guardado en Mongo")
-                st.session_state.show_input = False  # ocultar input tras guardar
-            except Exception as e:
-                st.error(f"💥 Error en insert_photo_record: {e}")
+    url_mongo, nuevo_url = show_url_input(latest, st.session_state.geo_data)
+    process_new_url(url_mongo, nuevo_url, st.session_state.geo_data)
 
     # ==============================
     # Mostrar imagen
@@ -173,32 +106,8 @@ if latest:
 # ==============================
 else:
     st.warning("⚠️ No hay fotos registradas en la base de datos.")
-    nuevo_url = st.text_input("✏️ Registrar primer URL de foto")
-
-    if nuevo_url:
-        hash_value = hashlib.sha256(nuevo_url.encode()).hexdigest()
-
-        # Debug inicial
-        st.subheader("🛠️ Inspector DEBUG")
-        st.json({
-            "Primer URL": nuevo_url,
-            "Hash generado": hash_value,
-            "Fecha (UTC)": datetime.utcnow().strftime("%d %b %y %H:%M"),
-            "Geo Data": st.session_state.geo_data if st.session_state.geo_data else "❌ No detectada"
-        })
-
-        try:
-            insert_photo_record(
-                photo_url=nuevo_url,
-                hash_value=hash_value,
-                checked_at=datetime.utcnow().replace(tzinfo=pytz.UTC),
-                geo_data=st.session_state.geo_data
-            )
-            print(f"✅ Guardado primer enlace: {nuevo_url}")
-            st.success("✅ Primer enlace guardado en Mongo")
-            st.session_state.show_input = False  # ocultar input tras guardar
-        except Exception as e:
-            st.error(f"💥 Error en insert_photo_record: {e}")
+    url_mongo, nuevo_url = show_url_input(None, st.session_state.geo_data)
+    process_new_url(url_mongo, nuevo_url, st.session_state.geo_data)
 
 # ==============================
 # Verificación manual
